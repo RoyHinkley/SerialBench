@@ -50,8 +50,10 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public bool DsrHolding { get; set; }
     public bool CDHolding { get; set; }
 
+#pragma warning disable CS0067 // Event injection will use a transport-neutral seam when lifecycle tests need it.
     public event SerialDataReceivedEventHandler? DataReceived;
     public event SerialPinChangedEventHandler? PinChanged;
+#pragma warning restore CS0067
 
     public void Open()
     {
@@ -96,7 +98,4 @@ internal sealed class FakeSerialTransport : ISerialTransport
         IsOpen = false;
         if (DisposeException is not null) throw DisposeException;
     }
-
-    public void RaiseDataReceived(SerialData eventType = SerialData.Chars) => DataReceived?.Invoke(this, new SerialDataReceivedEventArgs(eventType));
-    public void RaisePinChanged(SerialPinChange eventType) => PinChanged?.Invoke(this, new SerialPinChangedEventArgs(eventType));
 }
