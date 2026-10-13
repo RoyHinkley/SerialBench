@@ -10,6 +10,8 @@ The reusable serial layer must preserve evidence an ordinary application might h
 
 The immediate practical motivation is troubleshooting a Eurotherm controller. The previous SPT lacked binary byte logging and CRC-byte visibility present in newer AeonHacs code.
 
+The project is approaching a conceptual break from its WinForms predecessor. Once the current `SerialDevice` lifecycle/recovery refactor is complete, reconsider the application/project name deliberately. Until then, defer naming changes so the name reflects the finished abstraction rather than an anticipated one. The eventual cleanup should also favor coding filenames without spaces (for example, a solution filename such as `SerialPortTerminal.sln`) because quoting/escaping behavior still varies across shells, scripts, build tools, Windows, and Linux. Do not perform this rename piecemeal during the lifecycle work.
+
 ## Architecture direction
 
 Keep the serial engine independent of Avalonia and application policy.
@@ -27,6 +29,61 @@ SerialDevice
 Adapt selected current AeonHacs serial machinery rather than depending on AeonHacs.Core. Do not import broad Hacs lifecycle/state/global infrastructure or the old catch-all `Utility` class.
 
 Preserve field-proven receive/framing algorithms until understood and characterized by tests. Modernize their surroundings first. Functional changes to delicate protocol logic should be explicit rather than incidental cleanup.
+
+### Transport lifecycle, connection intent, and communications health
+
+The lifecycle refactor must keep three concepts independent:
+
+1. **Connection intent** — whether the caller/user wants the configured endpoint to remain connected.
+2. **Transport lifecycle** — whether an actual OS serial transport is connecting, available, unavailable, disconnecting, or disposed.
+3. **Communications health** — CRC failures, malformed/incomplete responses, framing errors, timeouts, garbled data, buffer anomalies, read/write failures, and related evidence while attempting communication.
+
+Bad communications do **not** imply loss of transport. A CRC failure, malformed message, unexpected byte, incomplete response, timeout, buffer anomaly, or isolated I/O exception must not automatically disconnect the device. Preserve/count/timestamp/report such evidence and continue whenever useful communication may still be possible. Repeated transient faults are themselves valuable diagnostic evidence.
+
+`SerialConnectionState` represents transport availability, not communications quality. Its current states are `Disconnected`, `Connecting`, `Connected`, `Disconnecting`, `Unavailable`, and `Disposed`. Recovery is an activity while `Unavailable`, not a peer lifecycle state. A separate `ConnectionRequested` indication should expose connection intent; recovery activity/counters/timestamps should be exposed independently as they are implemented.
+
+The core ownership invariant is:
+
+> **Connection intent persists; ownership of a failed transport does not.**
+
+When sufficient evidence establishes that a transport is unavailable, quiesce its workers, unsubscribe events, close/dispose the transport, and release every OS resource associated with that transport instance. Keep the connection intent and configuration. Recovery attempts must create fresh transport instances. Any recovery attempt that partially opens and then fails initialization must close/dispose that temporary instance before another attempt. While connection is requested and state is `Unavailable`, the implementation should normally own no open serial-port handle.
+
+USB hot disconnect/reconnect is a normal field condition. If the user requested COMx remain connected and the device disappears, retain that intent and periodically attempt to reacquire it. Prefer portable periodic reopen attempts for correctness; OS-specific arrival/removal notification may later be an optimization or UI aid, not the foundation of recovery. Automatic hot-plug recovery is not `Reset()` and must not increment `Resets`.
+
+Recovery policy separates retry frequency from retry lifetime and from retry-log frequency. `SerialRecoveryPolicy` currently models `RetryInterval`, `MaximumAttempts`, and `MaximumDuration`; negative/unset finite limits mean recovery may continue indefinitely. When both attempt and duration limits are finite, whichever is reached first stops automatic recovery. Repeated identical failures should eventually be condensed in the diagnostic log without slowing actual retry attempts; a materially different failure resets that condensation. Successful recovery is always a prominent baseline diagnostic event.
+
+The transport seam is intentional:
+
+```text
+SerialDevice
+     |
+     v
+ISerialTransport
+     |
+     +-- SerialPortTransport --> System.IO.Ports.SerialPort
+     +-- FakeSerialTransport --> deterministic lifecycle/fault tests
+```
+
+`ISerialTransportFactory` allows tests to supply successive transport instances, which is essential for proving that failed acquisition/recovery releases old resources and reacquisition uses a new instance.
+
+### Current lifecycle implementation status and next checkpoint
+
+The lifecycle design types and transport seam are present, but `SerialDevice` has **not yet been refactored to use the new lifecycle semantics fully**. At the current baseline it still uses inherited `connected`/`active` booleans, `Connect()` catches acquisition failures by calling the ordinary `Disconnect()` path, and `Disconnect()` closes/disposes the port before waiting for workers. `Dispose()` is not yet idempotent because it calls `Disconnect()` and then disposes synchronization events; a second disposal or later operation can touch already-disposed events. Worker references are not cleared after termination. These are known implementation gaps, not intended behavior.
+
+The next coding checkpoint, before automatic recovery, is deliberately limited to:
+
+1. centralize partial/full transport teardown and make resource ownership ordering correct;
+2. stop workers before releasing the transport they may still be using, and never dispose synchronization primitives while a live worker can touch them;
+3. make repeated `Disconnect()` harmless and `Dispose()` idempotent;
+4. ensure failed `Open()` or failure after `Open()` releases the partial transport without emitting a fictitious normal disconnect lifecycle;
+5. introduce `ConnectionRequested` and make `SerialConnectionState` authoritative for lifecycle state;
+6. define explicit post-disposal behavior (ordinary operations should fail predictably rather than through accidental `ObjectDisposedException` from internal wait handles; `Disconnect()` after disposal should be harmless);
+7. extend deterministic fake-transport tests for successful connect/disconnect, failed open, failure after open, close/dispose exceptions, repeated disconnect/dispose, lifecycle state/intent, and post-disposal operations;
+8. only after that checkpoint builds/tests cleanly, add automatic unavailable/reacquisition behavior and its race/resource-release tests.
+
+Do not ask for user testing after every small commit. Make small coherent commits on `main`, then stop at the meaningful checkpoint above for a single pull/build/test pass. Before every write, re-read current `main`/affected files and base the change on the current tree; do not recreate a tree from stale state. A previous stale-tree write accidentally restored an obsolete icon and is specifically not to be repeated. The intended current icon filename is `SerialPortTerminal.ico` (no spaces).
+
+`Resets` remains a useful reusable transport-reliability diagnostic because upstream applications use reset counts to decide when repeated communications recovery warrants alerting a user. Do not remove or reinterpret it merely because the current terminal UI does not expose it. Automatic transport reacquisition is not a reset.
 
 ## Configuration ownership and persistence
 
@@ -188,9 +245,8 @@ These timing values apply on connection and can be changed live while connected.
 
 Still to assess where useful:
 
-- serial-port arrival/removal monitoring and discovery behavior;
 - `RTS_CONTROL_TOGGLE` implementation on current .NET/Windows;
-- recovery/reset behavior not yet represented by the adapted engine.
+- richer communications-health counters/timestamps after lifecycle correctness is established.
 
 Review ring-buffer full/empty ambiguity and exact capacity around a 4096-byte read/wrap.
 
@@ -240,9 +296,10 @@ The modernization is close enough to treat **replacement readiness** as the crit
 
 Before declaring the legacy version superseded for general field use:
 
-1. Exercise reconnect/reset/error paths and remove misleading lifecycle diagnostics such as redundant disconnect messages from replacing an already disconnected device.
-2. Decide the few legacy functions above rather than accidentally dropping them.
-3. Verify any target-instrument-specific RTS toggle requirement before relying on that mode in the field.
+1. Complete and test the explicit connection-intent/transport lifecycle refactor described above, including safe/idempotent teardown.
+2. Add automatic hot-plug reacquisition while preserving communications faults as evidence rather than treating them as immediate disconnects.
+3. Decide the few legacy functions above rather than accidentally dropping them.
+4. Verify any target-instrument-specific RTS toggle requirement before relying on that mode in the field.
 
 CRC/framing characterization and pacing/silence exposure are complete enough to leave the replacement-critical list. A separate truly unframed/streaming receive mode should be designed only if a real use case requires it; the existing no-term-character mode is intentionally silence-framed.
 
@@ -264,7 +321,7 @@ Configuration help is deliberately deferred until after the immediate field-test
 
 A Windows x64 self-contained publish profile is provided as the first deployment mechanism. It favors a portable installation: no separate .NET runtime prerequisite, and configuration/logs remain alongside the application as intended.
 
-Publish with the `Windows-x64` profile (or equivalent `dotnet publish` command). It currently requests a self-contained single-file Release build with ReadyToRun enabled. Validate the produced package on a clean Windows machine before calling it an installer/release.
+The tracked publish profile is `Properties/PublishProfiles/FolderProfile.pubxml`; redundant/user-specific publish-profile files were removed. An equivalent `dotnet publish SerialPortTerminal.csproj -p:PublishProfile=FolderProfile` invocation is also valid. The current profile publishes beneath `bin\Publish`. Validate the produced package on a clean Windows machine before calling it an installer/release.
 
 For the immediate replacement milestone, a self-contained portable package is preferable to spending time on MSI/MSIX machinery. A conventional installer, shortcuts, file associations, signing, update mechanism, and architecture variants can be considered after the application is functionally trustworthy. If eventually installed under a protected location such as Program Files, the current beside-the-executable writable settings/log policy will need reconsideration or an explicitly user-writable data directory.
 
@@ -300,7 +357,11 @@ Implemented:
 - authoritative `TerminalConfiguration` bound by the UI, serializable to JSON, restored from the last session, and logged when changed;
 - initial/effective configuration snapshots in diagnostic logs;
 - self-contained Windows x64 publish profile;
-- xUnit characterization suite covering send parsing, CRC, virtual responses, fragmentation, framing, recovery, and protocol staging.
+- xUnit characterization suite covering send parsing, CRC, virtual responses, fragmentation, framing, recovery, protocol staging, and initial transport cleanup;
+- `SerialConnectionState` and `SerialRecoveryPolicy` design types;
+- `ISerialTransport` / `ISerialTransportFactory` production seam plus fake transport fault injection for deterministic lifecycle testing.
+
+Lifecycle/recovery is **in progress**: the design/seam exists, but `SerialDevice` still has the inherited boolean lifecycle and teardown ordering described above. Do not mistake the presence of the state/policy types for completed integration.
 
 Important limitations/deferred work are captured in the replacement-readiness and configuration sections above rather than maintained as a second competing list.
 
@@ -308,8 +369,9 @@ Important limitations/deferred work are captured in the replacement-readiness an
 
 Priority is now driven first by **safe legacy replacement / Hacs parity**, then usability, then convenience:
 
-1. Build/run the current UI refinement and test suite checkpoint.
-2. Exercise reconnect/reset/error lifecycle behavior and decide what Reset should mean in the modern application.
-3. Decide remaining legacy parity items consciously: compact counters, separate normalized data recording, standalone CRC displays, and Escape behavior.
+1. Refactor `SerialDevice` teardown/ownership and disposal for safe, idempotent lifecycle behavior; integrate `ConnectionRequested` and `SerialConnectionState`; extend fake-transport tests. Stop for a build/test checkpoint when this coherent block is complete.
+2. Add automatic transport-unavailable recovery/hot-plug reacquisition using fresh transport instances, configurable retry policy, resource-release invariants, and condensed repetitive diagnostics. Bad messages and isolated communications faults remain connected/observable rather than forcing recovery.
+3. Revisit intentional `Reset()` semantics and remaining legacy parity items: compact counters, separate normalized data recording, standalone CRC displays, and Escape behavior.
 4. Verify `RTS_CONTROL_TOGGLE` if a target field setup needs it.
 5. Then improve usability: configuration flyout/profiles, scalable live views/follow-tail behavior, configuration help/tooltips, and other conveniences.
+6. After the lifecycle/recovery refactor is complete, discuss and perform the deliberate project/application rename and coding-filename cleanup as one coherent identity change rather than piecemeal renaming.
