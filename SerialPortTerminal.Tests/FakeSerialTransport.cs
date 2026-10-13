@@ -28,6 +28,9 @@ internal sealed class FakeSerialTransportFactory : ISerialTransportFactory
 
 internal sealed class FakeSerialTransport : ISerialTransport
 {
+    private SerialDataReceivedEventHandler? dataReceived;
+    private SerialPinChangedEventHandler? pinChanged;
+
     public SerialPortSettings? Settings { get; set; }
     public SerialDevice.RtsModes RtsMode { get; set; }
     public Exception? OpenException { get; set; }
@@ -43,6 +46,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public int WriteCalls { get; private set; }
     public int CloseCalls { get; private set; }
     public int DisposeCalls { get; private set; }
+    public int DataReceivedSubscriptions { get; private set; }
+    public int PinChangedSubscriptions { get; private set; }
     public bool IsOpen { get; private set; }
     public bool RtsEnable { get; set; }
     public bool DtrEnable { get; set; }
@@ -50,10 +55,17 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public bool DsrHolding { get; set; }
     public bool CDHolding { get; set; }
 
-#pragma warning disable CS0067 // Event injection will use a transport-neutral seam when lifecycle tests need it.
-    public event SerialDataReceivedEventHandler? DataReceived;
-    public event SerialPinChangedEventHandler? PinChanged;
-#pragma warning restore CS0067
+    public event SerialDataReceivedEventHandler? DataReceived
+    {
+        add { dataReceived += value; DataReceivedSubscriptions++; }
+        remove { dataReceived -= value; DataReceivedSubscriptions--; }
+    }
+
+    public event SerialPinChangedEventHandler? PinChanged
+    {
+        add { pinChanged += value; PinChangedSubscriptions++; }
+        remove { pinChanged -= value; PinChangedSubscriptions--; }
+    }
 
     public void Open()
     {
