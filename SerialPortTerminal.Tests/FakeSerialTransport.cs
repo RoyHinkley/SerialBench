@@ -40,6 +40,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public Exception? WriteException { get; set; }
     public Exception? CloseException { get; set; }
     public Exception? DisposeException { get; set; }
+    public ManualResetEventSlim WriteEntered { get; } = new(false);
+    public ManualResetEventSlim? WriteGate { get; set; }
 
     public int OpenCalls { get; private set; }
     public int ReadCalls { get; private set; }
@@ -101,6 +103,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public void Write(byte[] buffer, int offset, int count)
     {
         WriteCalls++;
+        WriteEntered.Set();
+        WriteGate?.Wait();
         if (WriteException is not null) throw WriteException;
     }
 
