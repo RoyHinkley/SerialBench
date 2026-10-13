@@ -48,7 +48,9 @@ public sealed class SerialDevice : IDisposable
     public uint Resets { get; private set; }
     public double MillisecondsSinceLastTx => txSw.Elapsed.TotalMilliseconds;
     public double MillisecondsSinceLastRx => rxSw.Elapsed.TotalMilliseconds;
-    public bool Ready => port?.IsOpen == true && connected;
+    public bool ConnectionRequested { get; private set; }
+    public SerialConnectionState ConnectionState { get; private set; } = SerialConnectionState.Disconnected;
+    public bool Ready => ConnectionState == SerialConnectionState.Connected && port?.IsOpen == true;
     public bool HaveWork => transmitting || !commandQ.IsEmpty;
     public bool Busy => Ready && HaveWork;
     public bool Idle => !Busy;
@@ -58,9 +60,10 @@ public sealed class SerialDevice : IDisposable
 
     private readonly long instanceNumber = Interlocked.Increment(ref instanceCount);
     private readonly ISerialTransportFactory transportFactory;
+    private readonly object lifecycleLock = new();
     private ISerialTransport? port;
-    private volatile bool connected;
     private volatile bool active;
+    private bool disposed;
     private byte[] rx = new byte[RxBufferSize];
     private readonly byte[] xferBuffer = new byte[RxBufferSize];
     private Crc? rxCrc;
@@ -93,6 +96,7 @@ public sealed class SerialDevice : IDisposable
     /// <summary>Queues exact payload bytes for transmission. The caller's buffer is copied before returning.</summary>
     public bool Command(ReadOnlySpan<byte> command)
     {
+        ThrowIfDisposed();
         if (command.IsEmpty) return false;
         var bytes = command.ToArray();
         Trace($"received Command \"{SerialDataFormatter.ToEscapedText(bytes)}\"");
@@ -103,6 +107,7 @@ public sealed class SerialDevice : IDisposable
     /// <returns>False when the requested settings require a different receive framing worker; reconnect is then required.</returns>
     public bool StageProtocolSettings(SerialProtocolSettings settings)
     {
+        ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(settings);
         lock (protocolLock)
         {
@@ -115,32 +120,102 @@ public sealed class SerialDevice : IDisposable
 
     public bool Connect()
     {
-        if (connected) return true; Trace("connecting...");
-        try
+        lock (lifecycleLock)
         {
-            port = transportFactory.Create(PortSettings, RtsMode);
-            port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
-            protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null;
-            CreateCommsSession(); active = true; rxThread = StartThread(Receive, "receive"); processThread = StartThread(protocolSettings.UseCrc && !protocolSettings.OmitTermChar ? ProcessRx : ProcessRxBySilence, "process_rx"); txThread = StartThread(Transmit, "transmit"); connected = true;
-            Trace("connected."); PublishSignals(force: true); Dispatch(Connected, nameof(Connected)); return true;
+            ThrowIfDisposed();
+            ConnectionRequested = true;
+            if (ConnectionState == SerialConnectionState.Connected) return true;
+
+            ConnectionState = SerialConnectionState.Connecting;
+            Trace("connecting...");
+            try
+            {
+                port = transportFactory.Create(PortSettings, RtsMode);
+                port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
+                protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null;
+                CreateCommsSession(); active = true; rxThread = StartThread(Receive, "receive"); processThread = StartThread(protocolSettings.UseCrc && !protocolSettings.OmitTermChar ? ProcessRx : ProcessRxBySilence, "process_rx"); txThread = StartThread(Transmit, "transmit");
+                ConnectionState = SerialConnectionState.Connected;
+                Trace("connected."); PublishSignals(force: true); Dispatch(Connected, nameof(Connected)); return true;
+            }
+            catch (Exception e)
+            {
+                Error($"Connect failed: {e}");
+                StopWorkers();
+                ReleaseTransport();
+                ConnectionState = SerialConnectionState.Unavailable;
+                return false;
+            }
         }
-        catch (Exception e) { Error($"Connect failed: {e}"); Disconnect(); return false; }
     }
 
     public bool Disconnect()
     {
-        var errors = 0; Trace("disconnecting..."); if (connected) Dispatch(Disconnecting, nameof(Disconnecting)); connected = false; active = false; txSignal.Set(); rxSignal.Set(); processSignal.Set();
-        if (port is not null) { port.DataReceived -= RxDetected; port.PinChanged -= PinChanged; try { port.Close(); } catch (Exception e) { errors++; Error($"port close exception: {e}"); } try { port.Dispose(); } catch (Exception e) { errors++; Error($"port dispose exception: {e}"); } port = null; }
-        if (!WaitForWorkers(250)) { errors++; Error("worker thread shutdown timeout."); } lastSignalState = null; Trace("disconnected."); return errors == 0;
+        lock (lifecycleLock)
+        {
+            if (disposed) return true;
+            ConnectionRequested = false;
+            if (ConnectionState == SerialConnectionState.Disconnected && port is null && !WorkersAlive) return true;
+
+            var wasConnected = ConnectionState == SerialConnectionState.Connected;
+            ConnectionState = SerialConnectionState.Disconnecting;
+            Trace("disconnecting...");
+            if (wasConnected) Dispatch(Disconnecting, nameof(Disconnecting));
+            StopWorkers();
+            var success = ReleaseTransport();
+            lastSignalState = null;
+            ConnectionState = SerialConnectionState.Disconnected;
+            Trace("disconnected.");
+            return success;
+        }
     }
-    public bool Reset() { Trace("resetting..."); Disconnect(); Resets++; return Connect(); }
-    public void WaitForIdle() { while (!Idle) Thread.Sleep(5); }
+
+    public bool Reset()
+    {
+        ThrowIfDisposed();
+        Trace("resetting..."); Disconnect(); Resets++; return Connect();
+    }
+
+    public void WaitForIdle()
+    {
+        ThrowIfDisposed();
+        while (!Idle) Thread.Sleep(5);
+    }
 
     private void CreateCommsSession()
     {
         commandQ = new(); transmitting = false; rx = new byte[RxBufferSize]; rxbWrite = rxbHead = 0; var crc = protocolSettings.CreateCrcOptions(); rxCrc = crc is null ? null : new Crc(crc); txCrc = crc is null ? null : new Crc(crc); ErrorBufferOverflow = ErrorCrc = false; RxCrcCode = 0; ResponseCount = 0; lastSignalState = null; txSw.Reset(); rxSw.Reset(); Drain(txSignal); Drain(rxSignal); Drain(processSignal);
     }
     private Thread StartThread(ThreadStart action, string role) { var thread = new Thread(action) { Name = $"SerialDevice {instanceNumber} {role}", IsBackground = true }; thread.Start(); return thread; }
+
+    private void StopWorkers()
+    {
+        active = false;
+        txSignal.Set(); rxSignal.Set(); processSignal.Set();
+        JoinWorker(txThread); JoinWorker(rxThread); JoinWorker(processThread);
+        txThread = rxThread = processThread = null;
+        transmitting = false;
+    }
+
+    private static void JoinWorker(Thread? thread)
+    {
+        if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive) thread.Join();
+    }
+
+    private bool ReleaseTransport()
+    {
+        var p = port;
+        port = null;
+        if (p is null) return true;
+
+        var success = true;
+        try { p.DataReceived -= RxDetected; } catch (Exception e) { success = false; Error($"DataReceived unsubscribe exception: {e}"); }
+        try { p.PinChanged -= PinChanged; } catch (Exception e) { success = false; Error($"PinChanged unsubscribe exception: {e}"); }
+        try { p.Close(); } catch (Exception e) { success = false; Error($"port close exception: {e}"); }
+        try { p.Dispose(); } catch (Exception e) { success = false; Error($"port dispose exception: {e}"); }
+        return success;
+    }
+
+    private bool WorkersAlive => (txThread?.IsAlive ?? false) || (rxThread?.IsAlive ?? false) || (processThread?.IsAlive ?? false);
 
     private void Transmit()
     {
@@ -323,8 +398,24 @@ public sealed class SerialDevice : IDisposable
     private byte[] RxbBytes(int tail) { if (tail >= rxbHead) return rx[rxbHead..tail]; var result = new byte[RxBufferSize - rxbHead + tail]; Array.Copy(rx, rxbHead, result, 0, RxBufferSize - rxbHead); Array.Copy(rx, 0, result, RxBufferSize - rxbHead, tail); return result; }
     private void Trace(string message) { if (LogEverything) Log?.Record($"SerialDevice @{PortSettings.PortName} {message}"); }
     private void Error(string message) => Log?.Record($"SerialDevice @{PortSettings.PortName} ERROR: {message}");
-    private bool WaitForWorkers(int milliseconds) { var deadline = Environment.TickCount64 + milliseconds; while (Environment.TickCount64 < deadline) { if (!(txThread?.IsAlive ?? false) && !(rxThread?.IsAlive ?? false) && !(processThread?.IsAlive ?? false)) return true; Thread.Sleep(5); } return !(txThread?.IsAlive ?? false) && !(rxThread?.IsAlive ?? false) && !(processThread?.IsAlive ?? false); }
     private static void Drain(AutoResetEvent signal) { while (signal.WaitOne(0)) { } }
+    private void ThrowIfDisposed() { if (disposed) throw new ObjectDisposedException(nameof(SerialDevice)); }
     public void Close() => Disconnect();
-    public void Dispose() { Disconnect(); txSignal.Dispose(); rxSignal.Dispose(); processSignal.Dispose(); }
+
+    public void Dispose()
+    {
+        lock (lifecycleLock)
+        {
+            if (disposed) return;
+            ConnectionRequested = false;
+            if (ConnectionState == SerialConnectionState.Connected) Dispatch(Disconnecting, nameof(Disconnecting));
+            ConnectionState = SerialConnectionState.Disconnecting;
+            StopWorkers();
+            ReleaseTransport();
+            lastSignalState = null;
+            disposed = true;
+            ConnectionState = SerialConnectionState.Disposed;
+            txSignal.Dispose(); rxSignal.Dispose(); processSignal.Dispose();
+        }
+    }
 }
