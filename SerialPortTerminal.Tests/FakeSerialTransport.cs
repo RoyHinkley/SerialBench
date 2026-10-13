@@ -33,10 +33,14 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public Exception? OpenException { get; set; }
     public Exception? DiscardOutException { get; set; }
     public Exception? DiscardInException { get; set; }
+    public Exception? ReadException { get; set; }
+    public Exception? WriteException { get; set; }
     public Exception? CloseException { get; set; }
     public Exception? DisposeException { get; set; }
 
     public int OpenCalls { get; private set; }
+    public int ReadCalls { get; private set; }
+    public int WriteCalls { get; private set; }
     public int CloseCalls { get; private set; }
     public int DisposeCalls { get; private set; }
     public bool IsOpen { get; private set; }
@@ -46,10 +50,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public bool DsrHolding { get; set; }
     public bool CDHolding { get; set; }
 
-#pragma warning disable CS0067
     public event SerialDataReceivedEventHandler? DataReceived;
     public event SerialPinChangedEventHandler? PinChanged;
-#pragma warning restore CS0067
 
     public void Open()
     {
@@ -75,8 +77,18 @@ internal sealed class FakeSerialTransport : ISerialTransport
         if (DiscardInException is not null) throw DiscardInException;
     }
 
-    public int Read(byte[] buffer, int offset, int count) => 0;
-    public void Write(byte[] buffer, int offset, int count) { }
+    public int Read(byte[] buffer, int offset, int count)
+    {
+        ReadCalls++;
+        if (ReadException is not null) throw ReadException;
+        return 0;
+    }
+
+    public void Write(byte[] buffer, int offset, int count)
+    {
+        WriteCalls++;
+        if (WriteException is not null) throw WriteException;
+    }
 
     public void Dispose()
     {
@@ -84,4 +96,7 @@ internal sealed class FakeSerialTransport : ISerialTransport
         IsOpen = false;
         if (DisposeException is not null) throw DisposeException;
     }
+
+    public void RaiseDataReceived(SerialData eventType = SerialData.Chars) => DataReceived?.Invoke(this, new SerialDataReceivedEventArgs(eventType));
+    public void RaisePinChanged(SerialPinChange eventType) => PinChanged?.Invoke(this, new SerialPinChangedEventArgs(eventType));
 }
