@@ -5,7 +5,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationIcon>Serial Port Terminal.ico</ApplicationIcon>
+    <ApplicationIcon>SerialPortTerminal.ico</ApplicationIcon>
   </PropertyGroup>
 
   <!-- The SDK's default source glob is recursive. The test project lives below the
