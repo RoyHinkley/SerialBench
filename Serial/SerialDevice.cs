@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Ports;
-using System.Text;
 using SerialPortTerminal.Diagnostics;
 
 namespace SerialPortTerminal.Serial;
@@ -17,7 +16,6 @@ public sealed class SerialDevice : IDisposable
 {
     private const int RxBufferSize = 4096;
     private static long instanceCount;
-    private static readonly Encoding Ascii8 = Encoding.Latin1;
     public enum RtsModes { Enabled, Disabled, Toggle }
 
     public SerialPortSettings PortSettings { get; set; }
@@ -59,7 +57,8 @@ public sealed class SerialDevice : IDisposable
     public SerialProtocolSettings? PendingProtocolSettings => pendingProtocolSettings;
 
     private readonly long instanceNumber = Interlocked.Increment(ref instanceCount);
-    private SerialPort? port;
+    private readonly ISerialTransportFactory transportFactory;
+    private ISerialTransport? port;
     private volatile bool connected;
     private volatile bool active;
     private byte[] rx = new byte[RxBufferSize];
@@ -83,7 +82,12 @@ public sealed class SerialDevice : IDisposable
     private SerialProtocolSettings protocolSettings = SerialProtocolSettings.From(null, false);
     private SerialProtocolSettings? pendingProtocolSettings;
 
-    public SerialDevice(SerialPortSettings portSettings) => PortSettings = portSettings;
+    public SerialDevice(SerialPortSettings portSettings) : this(portSettings, new SerialPortTransportFactory()) { }
+    internal SerialDevice(SerialPortSettings portSettings, ISerialTransportFactory transportFactory)
+    {
+        PortSettings = portSettings ?? throw new ArgumentNullException(nameof(portSettings));
+        this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
+    }
     public SerialDevice(string portName, int baudRate = 115200) : this(new SerialPortSettings(portName, baudRate)) { }
 
     /// <summary>Queues exact payload bytes for transmission. The caller's buffer is copied before returning.</summary>
@@ -114,8 +118,7 @@ public sealed class SerialDevice : IDisposable
         if (connected) return true; Trace("connecting...");
         try
         {
-            if (RtsMode == RtsModes.Toggle) throw new NotSupportedException("RTS_CONTROL_TOGGLE has not yet been ported to the current .NET serial implementation.");
-            port = new SerialPort { PortName = PortSettings.PortName, BaudRate = PortSettings.BaudRate, Parity = PortSettings.Parity, DataBits = PortSettings.DataBits, StopBits = PortSettings.StopBits, Handshake = PortSettings.Handshake, DiscardNull = false, ReceivedBytesThreshold = 1, ReadTimeout = 20, WriteTimeout = 20, Encoding = Ascii8, RtsEnable = RtsMode == RtsModes.Enabled, DtrEnable = true };
+            port = transportFactory.Create(PortSettings, RtsMode);
             port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
             protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null;
             CreateCommsSession(); active = true; rxThread = StartThread(Receive, "receive"); processThread = StartThread(protocolSettings.UseCrc && !protocolSettings.OmitTermChar ? ProcessRx : ProcessRxBySilence, "process_rx"); txThread = StartThread(Transmit, "transmit"); connected = true;
