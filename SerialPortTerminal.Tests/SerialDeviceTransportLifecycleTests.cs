@@ -38,6 +38,29 @@ public sealed class SerialDeviceTransportLifecycleTests
     }
 
     [Fact]
+    public async Task Disconnect_waits_for_active_worker_before_releasing_transport()
+    {
+        var factory = new FakeSerialTransportFactory();
+        var transport = factory.Enqueue();
+        using var writeGate = new ManualResetEventSlim(false);
+        transport.WriteGate = writeGate;
+        using var device = new SerialDevice(Settings(), factory);
+        Assert.True(device.Connect());
+        Assert.True(device.Command(new byte[] { 0x41 }));
+        Assert.True(transport.WriteEntered.Wait(TimeSpan.FromSeconds(2)));
+
+        var disconnect = Task.Run(device.Disconnect);
+        Assert.True(SpinWait.SpinUntil(() => device.ConnectionState == SerialConnectionState.Disconnecting, TimeSpan.FromSeconds(2)));
+        Assert.Equal(0, transport.CloseCalls);
+        Assert.Equal(0, transport.DisposeCalls);
+
+        writeGate.Set();
+        Assert.True(await disconnect.WaitAsync(TimeSpan.FromSeconds(2)));
+        Assert.Equal(1, transport.CloseCalls);
+        Assert.Equal(1, transport.DisposeCalls);
+    }
+
+    [Fact]
     public void Failed_open_releases_transport_but_preserves_connection_intent()
     {
         var factory = new FakeSerialTransportFactory();
