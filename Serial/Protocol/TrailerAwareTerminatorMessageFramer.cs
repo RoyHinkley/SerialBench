@@ -53,6 +53,12 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     {
         while (true)
         {
+            if (pendingTerminator >= 0 && buffer.Count - pendingTerminator - 1 > integrity.FieldLength)
+            {
+                EmitAtPendingTerminator(frameReady);
+                continue;
+            }
+
             var changed = false;
             for (var index = 0; index < buffer.Count; index++)
             {
@@ -67,13 +73,6 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
 
                 if (pendingTerminator < 0)
                     pendingTerminator = index;
-
-                if (index - pendingTerminator > integrity.FieldLength)
-                {
-                    EmitAtPendingTerminator(frameReady);
-                    changed = true;
-                    break;
-                }
             }
 
             if (!changed)
