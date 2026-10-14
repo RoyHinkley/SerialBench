@@ -44,6 +44,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public Exception? WriteException { get; set; }
     public Exception? CloseException { get; set; }
     public Exception? DisposeException { get; set; }
+    public ManualResetEventSlim OpenEntered { get; } = new(false);
+    public ManualResetEventSlim? OpenGate { get; set; }
     public ManualResetEventSlim WriteEntered { get; } = new(false);
     public ManualResetEventSlim? WriteGate { get; set; }
 
@@ -77,6 +79,8 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public void Open()
     {
         OpenCalls++;
+        OpenEntered.Set();
+        OpenGate?.Wait();
         if (OpenException is not null) throw OpenException;
         IsOpen = true;
     }
