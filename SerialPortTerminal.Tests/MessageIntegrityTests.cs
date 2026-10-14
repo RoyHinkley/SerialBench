@@ -1,3 +1,4 @@
+using SerialPortTerminal.Serial;
 using SerialPortTerminal.Serial.Protocol;
 
 namespace SerialPortTerminal.Tests;
