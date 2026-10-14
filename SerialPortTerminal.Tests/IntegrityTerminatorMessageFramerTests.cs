@@ -58,41 +58,56 @@ public sealed class IntegrityTerminatorMessageFramerTests
     }
 
     [Fact]
-    public void Reserved_terminator_in_payload_is_rejected_and_next_frame_recovers()
+    public void Reserved_terminator_in_payload_discards_only_proven_malformed_sequence()
     {
         var options = AeonCrc();
         var illegalPayload = new byte[] { 0x10, options.TermChar, 0x20, 0x30 };
         var invalidWire = new Crc(options).Append(illegalPayload);
         var validPayload = new byte[] { 0x41, 0x42, 0x43 };
         var validWire = new Crc(options).Append(validPayload);
-        var stream = invalidWire.Concat(validWire).ToArray();
         var framer = CreateFramer(options);
         var frames = new List<byte[]>();
 
-        framer.Consume(stream, frame => frames.Add(frame.ToArray()));
+        framer.Consume(invalidWire.Concat(validWire).ToArray(), frame => frames.Add(frame.ToArray()));
 
         var frame = Assert.Single(frames);
         Assert.Equal(validWire[..^1], frame);
-        Assert.True(framer.RejectedPrefixes > 0);
+        Assert.Equal(1u, framer.RejectedSequences);
     }
 
     [Fact]
-    public void Corrupt_frame_does_not_consume_following_valid_frame()
+    public void Corrupt_frame_may_sacrifice_following_valid_frame_rather_than_search_for_suffix()
     {
         var options = AeonCrc();
         var corrupt = new Crc(options).Append(new byte[] { 0x10, 0x20, 0x30 });
         corrupt[1] ^= 0x01;
-        var validPayload = new byte[] { 0x51, 0x52, 0x53 };
-        var valid = new Crc(options).Append(validPayload);
+        var sacrificed = new Crc(options).Append(new byte[] { 0x51, 0x52, 0x53 });
+        var recovered = new Crc(options).Append(new byte[] { 0x61, 0x62, 0x63 });
         var framer = CreateFramer(options);
         var frames = new List<byte[]>();
 
-        framer.Consume(corrupt.Concat(valid).ToArray(), frame => frames.Add(frame.ToArray()));
+        framer.Consume(corrupt.Concat(sacrificed).Concat(recovered).ToArray(), frame => frames.Add(frame.ToArray()));
 
         var frame = Assert.Single(frames);
-        Assert.Equal(valid[..^1], frame);
-        Assert.True(new Crc16MessageIntegrity(options).TryValidate(frame, out var decoded));
-        Assert.Equal(validPayload, decoded);
+        Assert.Equal(recovered[..^1], frame);
+        Assert.Equal(1u, framer.RejectedSequences);
+    }
+
+    [Fact]
+    public void Missing_final_terminator_may_sacrifice_following_valid_frame()
+    {
+        var options = AeonCrc();
+        var unterminated = new Crc(options).Append(new byte[] { 0x10, 0x20, 0x30 })[..^1];
+        var sacrificed = new Crc(options).Append(new byte[] { 0x41, 0x42, 0x43 });
+        var recovered = new Crc(options).Append(new byte[] { 0x51, 0x52, 0x53 });
+        var framer = CreateFramer(options);
+        var frames = new List<byte[]>();
+
+        framer.Consume(unterminated.Concat(sacrificed).Concat(recovered).ToArray(), frame => frames.Add(frame.ToArray()));
+
+        var frame = Assert.Single(frames);
+        Assert.Equal(recovered[..^1], frame);
+        Assert.Equal(1u, framer.RejectedSequences);
     }
 
     [Fact]
