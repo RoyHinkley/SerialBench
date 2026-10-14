@@ -6,8 +6,10 @@ namespace SerialPortTerminal.Serial.Protocol;
 /// <remarks>
 /// The terminator is forbidden in payload bytes but may occur in the integrity field. A terminator therefore
 /// cannot be classified until enough subsequent bytes arrive to distinguish a real boundary from an integrity
-/// byte. Invalid candidates are retained until a later terminator provides an unambiguous resynchronization
-/// point. This is the framing pattern used by the Aeon payload + CRC + ETX protocol.
+/// byte. Integrity is used only to resolve that defined ambiguity; this framer does not search corrupt data for
+/// an embedded CRC-valid suffix. Once a candidate is demonstrably malformed, the entire ambiguous sequence is
+/// discarded through the current terminator. A framing fault may therefore also sacrifice a following intact
+/// message, after which normal framing naturally restores synchronization.
 /// </remarks>
 public sealed class IntegrityTerminatorMessageFramer : IMessageFramer
 {
@@ -25,8 +27,8 @@ public sealed class IntegrityTerminatorMessageFramer : IMessageFramer
         this.integrity = integrity;
     }
 
-    /// <summary>Number of invalid prefixes discarded while resynchronizing the byte stream.</summary>
-    public uint RejectedPrefixes { get; private set; }
+    /// <summary>Number of malformed ambiguous sequences discarded by the framer.</summary>
+    public uint RejectedSequences { get; private set; }
 
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
     {
@@ -48,32 +50,32 @@ public sealed class IntegrityTerminatorMessageFramer : IMessageFramer
     public void Reset()
     {
         buffer.Clear();
-        RejectedPrefixes = 0;
+        RejectedSequences = 0;
     }
 
     private void TryCompleteCandidate(Action<ReadOnlyMemory<byte>> frameReady)
     {
-        while (buffer.Count > integrity.FieldLength && buffer[^1] == terminator)
+        if (buffer.Count <= integrity.FieldLength)
+            return;
+
+        var candidate = buffer.GetRange(0, buffer.Count - 1).ToArray();
+        if (integrity.TryValidate(candidate, out var payload) && !payload.Contains(terminator))
         {
-            var candidate = buffer.GetRange(0, buffer.Count - 1).ToArray();
-            if (integrity.TryValidate(candidate, out var payload) && !payload.Contains(terminator))
-            {
-                frameReady(candidate);
-                buffer.Clear();
-                return;
-            }
-
-            // With a fixed-width integrity field, a terminator before that field cannot belong to a valid
-            // candidate ending at the current byte. Discard through the first such terminator and retry the
-            // same current boundary against the remaining bytes. If there is no such byte yet, the current
-            // terminator may itself be an integrity byte, so more input is required before deciding.
-            var payloadLength = candidate.Length - integrity.FieldLength;
-            var invalidTerminator = candidate.AsSpan(0, payloadLength).IndexOf(terminator);
-            if (invalidTerminator < 0)
-                return;
-
-            buffer.RemoveRange(0, invalidTerminator + 1);
-            RejectedPrefixes++;
+            frameReady(candidate);
+            buffer.Clear();
+            return;
         }
+
+        // If no earlier terminator lies in the candidate payload region, the current terminator may itself be
+        // one of the fixed-width integrity bytes. More input is required before it can be classified safely.
+        var payloadLength = candidate.Length - integrity.FieldLength;
+        if (payloadLength <= 0 || candidate.AsSpan(0, payloadLength).IndexOf(terminator) < 0)
+            return;
+
+        // An earlier terminator has now aged far enough into the candidate to prove that the accumulated sequence
+        // cannot be one valid frame. Do not search within corrupt data for a convenient CRC-valid suffix: discard
+        // the whole ambiguous sequence through this boundary and let a subsequent normally framed message resync.
+        buffer.Clear();
+        RejectedSequences++;
     }
 }
