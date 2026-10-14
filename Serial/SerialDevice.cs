@@ -15,6 +15,7 @@ public readonly record struct SerialSignalState(bool Rts, bool Cts, bool Dtr, bo
 public sealed class SerialDevice : IDisposable
 {
     private const int RxBufferSize = 4096;
+    private static readonly TimeSpan AvailabilityPollInterval = TimeSpan.FromMilliseconds(250);
     private static long instanceCount;
     public enum RtsModes { Enabled, Disabled, Toggle }
 
@@ -30,6 +31,7 @@ public sealed class SerialDevice : IDisposable
     public bool LogEverything { get; set; }
     public bool LogSignals { get; set; }
     public DiagnosticLog? Log { get; set; }
+    public SerialRecoveryPolicy RecoveryPolicy { get; set; } = SerialRecoveryPolicy.Default;
 
     public event EventHandler? Connected;
     public event EventHandler? Disconnecting;
@@ -50,6 +52,9 @@ public sealed class SerialDevice : IDisposable
     public double MillisecondsSinceLastRx => rxSw.Elapsed.TotalMilliseconds;
     public bool ConnectionRequested { get; private set; }
     public SerialConnectionState ConnectionState { get; private set; } = SerialConnectionState.Disconnected;
+    public bool RecoveryActive => recoveryActive && ConnectionRequested && ConnectionState == SerialConnectionState.Unavailable;
+    public int RecoveryAttempts { get; private set; }
+    public DateTimeOffset? RecoveryStartedAt { get; private set; }
     public bool Ready => ConnectionState == SerialConnectionState.Connected && port?.IsOpen == true;
     public bool HaveWork => transmitting || !commandQ.IsEmpty;
     public bool Busy => Ready && HaveWork;
@@ -73,17 +78,23 @@ public sealed class SerialDevice : IDisposable
     private Thread? txThread;
     private Thread? rxThread;
     private Thread? processThread;
+    private Thread? recoveryThread;
+    private volatile bool recoveryActive;
     private readonly AutoResetEvent txSignal = new(false);
     private readonly AutoResetEvent rxSignal = new(false);
     private readonly AutoResetEvent processSignal = new(false);
+    private readonly AutoResetEvent recoverySignal = new(false);
     private readonly Stopwatch txSw = new();
     private readonly Stopwatch rxSw = new();
+    private readonly Stopwatch recoverySw = new();
     private volatile int rxbWrite;
     private int rxbHead;
     private SerialSignalState? lastSignalState;
     private readonly object protocolLock = new();
     private SerialProtocolSettings protocolSettings = SerialProtocolSettings.From(null, false);
     private SerialProtocolSettings? pendingProtocolSettings;
+    private string? recoveryFailureSignature;
+    private int repeatedRecoveryFailures;
 
     public SerialDevice(SerialPortSettings portSettings) : this(portSettings, new SerialPortTransportFactory()) { }
     internal SerialDevice(SerialPortSettings portSettings, ISerialTransportFactory transportFactory)
@@ -126,25 +137,40 @@ public sealed class SerialDevice : IDisposable
             ConnectionRequested = true;
             if (ConnectionState == SerialConnectionState.Connected) return true;
 
-            ConnectionState = SerialConnectionState.Connecting;
-            Trace("connecting...");
-            try
+            var connected = TryAcquireTransport(isRecoveryAttempt: false);
+            StartConnectionMaintenance();
+            return connected;
+        }
+    }
+
+    private bool TryAcquireTransport(bool isRecoveryAttempt)
+    {
+        ConnectionState = SerialConnectionState.Connecting;
+        Trace(isRecoveryAttempt ? "recovery connection attempt..." : "connecting...");
+        try
+        {
+            port = transportFactory.Create(PortSettings, RtsMode);
+            port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
+            protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null;
+            CreateCommsSession(); active = true; rxThread = StartThread(Receive, "receive"); processThread = StartThread(protocolSettings.UseCrc && !protocolSettings.OmitTermChar ? ProcessRx : ProcessRxBySilence, "process_rx"); txThread = StartThread(Transmit, "transmit");
+            ConnectionState = SerialConnectionState.Connected;
+            if (isRecoveryAttempt)
             {
-                port = transportFactory.Create(PortSettings, RtsMode);
-                port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
-                protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null;
-                CreateCommsSession(); active = true; rxThread = StartThread(Receive, "receive"); processThread = StartThread(protocolSettings.UseCrc && !protocolSettings.OmitTermChar ? ProcessRx : ProcessRxBySilence, "process_rx"); txThread = StartThread(Transmit, "transmit");
-                ConnectionState = SerialConnectionState.Connected;
-                Trace("connected."); PublishSignals(force: true); Dispatch(Connected, nameof(Connected)); return true;
+                Log?.Record($"SerialDevice @{PortSettings.PortName} connection recovered after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s.");
+                recoveryFailureSignature = null;
+                repeatedRecoveryFailures = 0;
             }
-            catch (Exception e)
-            {
-                Error($"Connect failed: {e}");
-                StopWorkers();
-                ReleaseTransport();
-                ConnectionState = SerialConnectionState.Unavailable;
-                return false;
-            }
+            else Trace("connected.");
+            PublishSignals(force: true); Dispatch(Connected, nameof(Connected)); return true;
+        }
+        catch (Exception e)
+        {
+            if (isRecoveryAttempt) RecordRecoveryFailure(e); else Error($"Connect failed: {e}");
+            StopWorkers();
+            ReleaseTransport();
+            ConnectionState = SerialConnectionState.Unavailable;
+            if (!isRecoveryAttempt) BeginRecoveryPeriod();
+            return false;
         }
     }
 
@@ -154,6 +180,7 @@ public sealed class SerialDevice : IDisposable
         {
             if (disposed) return true;
             ConnectionRequested = false;
+            StopConnectionMaintenance();
             if (ConnectionState == SerialConnectionState.Disconnected && port is null && !WorkersAlive) return true;
 
             var wasConnected = ConnectionState == SerialConnectionState.Connected;
@@ -179,6 +206,120 @@ public sealed class SerialDevice : IDisposable
     {
         ThrowIfDisposed();
         while (!Idle) Thread.Sleep(5);
+    }
+
+    private void StartConnectionMaintenance()
+    {
+        if (recoveryThread?.IsAlive == true) { recoverySignal.Set(); return; }
+        recoveryActive = true;
+        recoveryThread = StartThread(MaintainConnection, "connection_maintenance");
+    }
+
+    private void StopConnectionMaintenance()
+    {
+        recoveryActive = false;
+        recoverySignal.Set();
+        JoinWorker(recoveryThread);
+        recoveryThread = null;
+    }
+
+    private void BeginRecoveryPeriod()
+    {
+        RecoveryAttempts = 0;
+        RecoveryStartedAt = DateTimeOffset.Now;
+        recoverySw.Restart();
+        recoveryFailureSignature = null;
+        repeatedRecoveryFailures = 0;
+    }
+
+    private void MaintainConnection()
+    {
+        Trace("starting connection maintenance thread.");
+        try
+        {
+            while (recoveryActive)
+            {
+                var delay = ConnectionState == SerialConnectionState.Unavailable ? RecoveryPolicy.RetryInterval : AvailabilityPollInterval;
+                if (delay <= TimeSpan.Zero)
+                {
+                    Error("recovery stopped: RetryInterval must be greater than zero.");
+                    recoveryActive = false;
+                    break;
+                }
+                recoverySignal.WaitOne(delay);
+                if (!recoveryActive) break;
+                if (!Monitor.TryEnter(lifecycleLock)) continue;
+                try
+                {
+                    if (disposed || !ConnectionRequested) break;
+                    if (ConnectionState == SerialConnectionState.Connected)
+                    {
+                        bool available;
+                        try { available = port?.IsAvailable == true; }
+                        catch (Exception e) { Error($"transport availability check exception: {e.Message}"); continue; }
+                        if (!available) HandleTransportUnavailable();
+                        continue;
+                    }
+                    if (ConnectionState != SerialConnectionState.Unavailable) continue;
+
+                    SerialRecoveryPolicy policy;
+                    try
+                    {
+                        policy = RecoveryPolicy;
+                        if (!policy.AllowsAttempt(RecoveryAttempts, recoverySw.Elapsed))
+                        {
+                            Log?.Record($"SerialDevice @{PortSettings.PortName} automatic recovery stopped after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s; connection remains requested and unavailable.");
+                            recoveryActive = false;
+                            break;
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Error($"recovery policy invalid: {e.Message}");
+                        recoveryActive = false;
+                        break;
+                    }
+
+                    RecoveryAttempts++;
+                    TryAcquireTransport(isRecoveryAttempt: true);
+                }
+                finally { Monitor.Exit(lifecycleLock); }
+            }
+        }
+        catch (ObjectDisposedException) when (disposed) { }
+        catch (Exception e) { Error($"connection maintenance exception: {e}"); }
+        finally { Trace("ending connection maintenance thread."); }
+    }
+
+    private void HandleTransportUnavailable()
+    {
+        Log?.Record($"SerialDevice @{PortSettings.PortName} transport unavailable; preserving connection request and releasing transport.");
+        StopWorkers();
+        ReleaseTransport();
+        lastSignalState = null;
+        ConnectionState = SerialConnectionState.Unavailable;
+        BeginRecoveryPeriod();
+        Dispatch(Disconnecting, nameof(Disconnecting));
+    }
+
+    private void RecordRecoveryFailure(Exception e)
+    {
+        var signature = $"{e.GetType().FullName}: {e.Message}";
+        if (!StringComparer.Ordinal.Equals(signature, recoveryFailureSignature))
+        {
+            recoveryFailureSignature = signature;
+            repeatedRecoveryFailures = 1;
+            Error($"recovery attempt {RecoveryAttempts} failed: {signature}");
+            return;
+        }
+
+        repeatedRecoveryFailures++;
+        if (repeatedRecoveryFailures <= 3)
+            Error($"recovery attempt {RecoveryAttempts} failed: {signature}");
+        else if (repeatedRecoveryFailures == 4)
+            Error($"recovery continues after 4 identical failures; further identical failures will be condensed.");
+        else if (repeatedRecoveryFailures % 10 == 0)
+            Error($"recovery still failing identically after {repeatedRecoveryFailures} attempts: {signature}");
     }
 
     private void CreateCommsSession()
@@ -408,6 +549,7 @@ public sealed class SerialDevice : IDisposable
         {
             if (disposed) return;
             ConnectionRequested = false;
+            StopConnectionMaintenance();
             if (ConnectionState == SerialConnectionState.Connected) Dispatch(Disconnecting, nameof(Disconnecting));
             ConnectionState = SerialConnectionState.Disconnecting;
             StopWorkers();
@@ -415,7 +557,7 @@ public sealed class SerialDevice : IDisposable
             lastSignalState = null;
             disposed = true;
             ConnectionState = SerialConnectionState.Disposed;
-            txSignal.Dispose(); rxSignal.Dispose(); processSignal.Dispose();
+            txSignal.Dispose(); rxSignal.Dispose(); processSignal.Dispose(); recoverySignal.Dispose();
         }
     }
 }
