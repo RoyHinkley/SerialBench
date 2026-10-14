@@ -5,6 +5,7 @@ namespace SerialPortTerminal.Tests;
 
 internal sealed class FakeSerialTransportFactory : ISerialTransportFactory
 {
+    private readonly object sync = new();
     private readonly Queue<FakeSerialTransport> transports = new();
 
     public List<FakeSerialTransport> Created { get; } = [];
@@ -12,17 +13,20 @@ internal sealed class FakeSerialTransportFactory : ISerialTransportFactory
     public FakeSerialTransport Enqueue()
     {
         var transport = new FakeSerialTransport();
-        transports.Enqueue(transport);
+        lock (sync) transports.Enqueue(transport);
         return transport;
     }
 
     public ISerialTransport Create(SerialPortSettings settings, SerialDevice.RtsModes rtsMode)
     {
-        var transport = transports.Count > 0 ? transports.Dequeue() : new FakeSerialTransport();
-        transport.Settings = settings;
-        transport.RtsMode = rtsMode;
-        Created.Add(transport);
-        return transport;
+        lock (sync)
+        {
+            var transport = transports.Count > 0 ? transports.Dequeue() : new FakeSerialTransport();
+            transport.Settings = settings;
+            transport.RtsMode = rtsMode;
+            Created.Add(transport);
+            return transport;
+        }
     }
 }
 
@@ -50,6 +54,7 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public int DisposeCalls { get; private set; }
     public int DataReceivedSubscriptions { get; private set; }
     public int PinChangedSubscriptions { get; private set; }
+    public bool IsAvailable { get; set; } = true;
     public bool IsOpen { get; private set; }
     public bool RtsEnable { get; set; }
     public bool DtrEnable { get; set; }
