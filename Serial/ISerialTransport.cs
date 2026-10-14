@@ -16,6 +16,8 @@ internal interface ISerialTransport : IDisposable
     event SerialDataReceivedEventHandler? DataReceived;
     event SerialPinChangedEventHandler? PinChanged;
 
+    /// <summary>True while the configured endpoint is currently enumerated by the operating system.</summary>
+    bool IsAvailable { get; }
     bool IsOpen { get; }
     bool RtsEnable { get; set; }
     bool DtrEnable { get; set; }
@@ -50,12 +52,14 @@ internal sealed class SerialPortTransport : ISerialTransport
 {
     private static readonly Encoding Ascii8 = Encoding.Latin1;
     private readonly SerialPort port;
+    private readonly string portName;
 
     public SerialPortTransport(SerialPortSettings settings, SerialDevice.RtsModes rtsMode)
     {
         if (rtsMode == SerialDevice.RtsModes.Toggle)
             throw new NotSupportedException("RTS_CONTROL_TOGGLE has not yet been ported to the current .NET serial implementation.");
 
+        portName = settings.PortName;
         port = new SerialPort
         {
             PortName = settings.PortName,
@@ -86,6 +90,7 @@ internal sealed class SerialPortTransport : ISerialTransport
         remove => port.PinChanged -= value;
     }
 
+    public bool IsAvailable => SerialPort.GetPortNames().Contains(portName, StringComparer.OrdinalIgnoreCase);
     public bool IsOpen => port.IsOpen;
     public bool RtsEnable { get => port.RtsEnable; set => port.RtsEnable = value; }
     public bool DtrEnable { get => port.DtrEnable; set => port.DtrEnable = value; }
