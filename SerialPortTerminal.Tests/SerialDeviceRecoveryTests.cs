@@ -99,6 +99,32 @@ public sealed class SerialDeviceRecoveryTests
     }
 
     [Fact]
+    public async Task Disconnect_wins_cleanly_when_recovery_success_is_already_in_flight()
+    {
+        var factory = new FakeSerialTransportFactory();
+        var failed = factory.Enqueue();
+        failed.OpenException = new IOException("missing");
+        var replacement = factory.Enqueue();
+        using var openGate = new ManualResetEventSlim(false);
+        replacement.OpenGate = openGate;
+        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery() };
+        Assert.False(device.Connect());
+        Assert.True(replacement.OpenEntered.Wait(TimeSpan.FromSeconds(2)));
+
+        var disconnect = Task.Run(device.Disconnect);
+        Assert.False(disconnect.Wait(TimeSpan.FromMilliseconds(50)));
+        openGate.Set();
+        Assert.True(await disconnect.WaitAsync(TimeSpan.FromSeconds(2)));
+
+        Assert.False(device.ConnectionRequested);
+        Assert.Equal(SerialConnectionState.Disconnected, device.ConnectionState);
+        Assert.Equal(1, replacement.CloseCalls);
+        Assert.Equal(1, replacement.DisposeCalls);
+        Assert.Equal(0, replacement.DataReceivedSubscriptions);
+        Assert.Equal(0, replacement.PinChangedSubscriptions);
+    }
+
+    [Fact]
     public void Recovery_stops_at_attempt_limit_without_clearing_connection_intent()
     {
         var factory = new FakeSerialTransportFactory();
@@ -110,10 +136,9 @@ public sealed class SerialDeviceRecoveryTests
         using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery(maximumAttempts: 2) };
         Assert.False(device.Connect());
 
-        Assert.True(SpinWait.SpinUntil(() => device.RecoveryAttempts == 2 && !device.RecoveryActive, TimeSpan.FromSeconds(2)));
+        Assert.True(SpinWait.SpinUntil(() => device.RecoveryAttempts == 2 && device.ConnectionState == SerialConnectionState.Unavailable && !device.RecoveryActive, TimeSpan.FromSeconds(2)));
 
         Assert.True(device.ConnectionRequested);
-        Assert.Equal(SerialConnectionState.Unavailable, device.ConnectionState);
         Assert.Equal(3, factory.Created.Count);
         Assert.All(factory.Created, transport => Assert.Equal(1, transport.DisposeCalls));
     }
