@@ -146,7 +146,8 @@ public sealed class SerialDevice : IDisposable
     private bool TryAcquireTransport(bool isRecoveryAttempt)
     {
         ConnectionState = SerialConnectionState.Connecting;
-        Trace(isRecoveryAttempt ? "recovery connection attempt..." : "connecting...");
+        if (!isRecoveryAttempt || repeatedRecoveryFailures < 3)
+            Trace(isRecoveryAttempt ? "recovery connection attempt..." : "connecting...");
         try
         {
             port = transportFactory.Create(PortSettings, RtsMode);
