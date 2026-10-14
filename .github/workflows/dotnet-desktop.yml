@@ -20,10 +20,10 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore SerialPortTerminal.slnx
+        run: dotnet restore "Serial Port Terminal.sln"
 
       - name: Build
-        run: dotnet build SerialPortTerminal.slnx --configuration Release --no-restore
+        run: dotnet build  "Serial Port Terminal.sln" --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test SerialPortTerminal.slnx --configuration Release --no-build
+        run: dotnet test  "Serial Port Terminal.sln" --configuration Release --no-build
