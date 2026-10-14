@@ -17,6 +17,14 @@ public interface IMessageIntegrity
     /// <summary>Appends this strategy's integrity field to exact payload bytes.</summary>
     byte[] Append(ReadOnlySpan<byte> payload);
 
-    /// <summary>Validates a payload plus integrity field and returns the payload when valid.</summary>
+    /// <summary>
+    /// Validates a payload plus integrity field and returns the payload bytes independently of validation.
+    /// </summary>
+    /// <remarks>
+    /// When the frame is long enough to contain the integrity field, <paramref name="payload"/> is the frame
+    /// with that field removed even when validation fails. This preserves the received application bytes for
+    /// diagnostics; integrity failure is evidence about those bytes, not a reason to erase them. A frame too
+    /// short to contain the integrity field returns an empty payload.
+    /// </remarks>
     bool TryValidate(ReadOnlySpan<byte> frame, out byte[] payload);
 }

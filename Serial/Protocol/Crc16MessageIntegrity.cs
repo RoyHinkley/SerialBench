@@ -31,15 +31,9 @@ public sealed class Crc16MessageIntegrity : IMessageIntegrity
             return false;
         }
 
+        payload = frame[..^FieldLength].ToArray();
         var crc = new Crc(options);
         crc.Update(frame);
-        if (!crc.Good())
-        {
-            payload = [];
-            return false;
-        }
-
-        payload = frame[..^FieldLength].ToArray();
-        return true;
+        return crc.Good();
     }
 }

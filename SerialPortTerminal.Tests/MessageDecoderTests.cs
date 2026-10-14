@@ -35,12 +35,14 @@ public sealed class MessageDecoderTests
     }
 
     [Fact]
-    public void Bad_integrity_remains_a_message_with_exact_frame_bytes()
+    public void Bad_integrity_preserves_frame_and_candidate_payload()
     {
         var integrity = new Crc16MessageIntegrity(TestCrcOptions());
         var decoder = new MessageDecoder(new TrailerAwareTerminatorMessageFramer(0x03, integrity), integrity);
-        var badFrame = integrity.Append(new byte[] { 0x31, 0x32, 0x33 });
+        var payload = new byte[] { 0x31, 0x32, 0x33 };
+        var badFrame = integrity.Append(payload);
         badFrame[0] ^= 0x01;
+        var expectedPayload = badFrame[..^integrity.FieldLength];
         var wire = badFrame.Append((byte)0x03).Concat(new byte[] { 0x55, 0x66, 0x77 }).ToArray();
         var messages = new List<DecodedMessage>();
 
@@ -49,7 +51,7 @@ public sealed class MessageDecoderTests
         var message = Assert.Single(messages);
         Assert.False(message.IntegrityValid);
         Assert.Equal(badFrame, message.Frame.ToArray());
-        Assert.Empty(message.Payload.ToArray());
+        Assert.Equal(expectedPayload, message.Payload.ToArray());
     }
 
     [Fact]

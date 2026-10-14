@@ -24,6 +24,6 @@ public sealed class MessageDecoder(IMessageFramer framer, IMessageIntegrity inte
     {
         var wireFrame = frame.ToArray();
         var valid = integrity.TryValidate(wireFrame, out var payload);
-        messageReady(new DecodedMessage(wireFrame, valid ? payload : ReadOnlyMemory<byte>.Empty, valid));
+        messageReady(new DecodedMessage(wireFrame, payload, valid));
     }
 }
