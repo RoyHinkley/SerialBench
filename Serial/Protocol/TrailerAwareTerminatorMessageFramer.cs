@@ -32,29 +32,15 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
         foreach (var value in bytes)
         {
             buffer.Add(value);
-
-            if (pendingTerminator >= 0)
-            {
-                if (value == terminator && TryEmitCurrentCandidate(frameReady))
-                    continue;
-
-                if (buffer.Count - pendingTerminator - 1 > integrity.FieldLength)
-                    EmitAtPendingTerminator(frameReady);
-            }
-
-            if (value != terminator)
-                continue;
-
-            if (TryEmitCurrentCandidate(frameReady))
-                continue;
-
-            pendingTerminator = buffer.Count - 1;
+            Evaluate(frameReady);
         }
     }
 
     public void SilenceElapsed(Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
+        if (pendingTerminator >= 0)
+            EmitAtPendingTerminator(frameReady);
     }
 
     public void Reset()
@@ -63,17 +49,49 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
         pendingTerminator = -1;
     }
 
-    private bool TryEmitCurrentCandidate(Action<ReadOnlyMemory<byte>> frameReady)
+    private void Evaluate(Action<ReadOnlyMemory<byte>> frameReady)
     {
-        if (buffer.Count <= integrity.FieldLength)
+        while (true)
+        {
+            var changed = false;
+            for (var index = 0; index < buffer.Count; index++)
+            {
+                if (buffer[index] != terminator)
+                    continue;
+
+                if (TryEmitCandidate(index, frameReady))
+                {
+                    changed = true;
+                    break;
+                }
+
+                if (pendingTerminator < 0)
+                    pendingTerminator = index;
+
+                if (index - pendingTerminator > integrity.FieldLength)
+                {
+                    EmitAtPendingTerminator(frameReady);
+                    changed = true;
+                    break;
+                }
+            }
+
+            if (!changed)
+                return;
+        }
+    }
+
+    private bool TryEmitCandidate(int terminatorIndex, Action<ReadOnlyMemory<byte>> frameReady)
+    {
+        if (terminatorIndex < integrity.FieldLength)
             return false;
 
-        var candidate = buffer.GetRange(0, buffer.Count - 1).ToArray();
+        var candidate = buffer.GetRange(0, terminatorIndex).ToArray();
         if (!integrity.TryValidate(candidate, out var payload) || payload.Contains(terminator))
             return false;
 
         frameReady(candidate);
-        buffer.Clear();
+        buffer.RemoveRange(0, terminatorIndex + 1);
         pendingTerminator = -1;
         return true;
     }
@@ -81,11 +99,8 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     private void EmitAtPendingTerminator(Action<ReadOnlyMemory<byte>> frameReady)
     {
         var frame = buffer.GetRange(0, pendingTerminator).ToArray();
-        var remainder = buffer.GetRange(pendingTerminator + 1, buffer.Count - pendingTerminator - 1);
-
         frameReady(frame);
-        buffer.Clear();
-        buffer.AddRange(remainder);
-        pendingTerminator = buffer.LastIndexOf(terminator);
+        buffer.RemoveRange(0, pendingTerminator + 1);
+        pendingTerminator = -1;
     }
 }
