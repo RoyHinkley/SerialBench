@@ -20,6 +20,7 @@ internal sealed class SerialMessagePipeline : IDisposable
         TimeSpan silenceInterval,
         Action<Exception>? receiveError = null,
         Action<Exception>? consumerError = null,
+        Action<int>? bytesAcquired = null,
         int acquisitionBufferSize = 4096)
     {
         ArgumentNullException.ThrowIfNull(transport);
@@ -29,7 +30,11 @@ internal sealed class SerialMessagePipeline : IDisposable
         dispatch = new MessageDispatchQueue(decoder, messageReceived, consumerError);
         acquirer = new SerialReceiveAcquirer(
             transport,
-            bytes => dispatch.Consume(bytes.Span),
+            bytes =>
+            {
+                bytesAcquired?.Invoke(bytes.Length);
+                dispatch.Consume(bytes.Span);
+            },
             acquisitionBufferSize);
         receivePump = new ReceivePump(
             () => acquirer.DrainAvailable(),
