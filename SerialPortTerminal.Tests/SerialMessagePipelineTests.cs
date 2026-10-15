@@ -45,4 +45,40 @@ public sealed class SerialMessagePipelineTests
         Assert.NotNull(received);
         Assert.Equal(new byte[] { 0x41, 0x42, 0x43 }, received!.Payload.ToArray());
     }
+
+    [Fact]
+    public void Legacy_Aeon_settings_run_end_to_end_through_composed_pipeline()
+    {
+        var transport = new FakeSerialTransport();
+        var options = new CrcOptions
+        {
+            Polynomial = 0xA001,
+            InitialValue = 0xFFFF,
+            ExpectedResidue = 0,
+            PostInvert = false,
+            MsBitFirst = false,
+            MsByteFirst = false,
+            TermChar = 0x03,
+            OmitTermChar = false
+        };
+        var settings = SerialProtocolSettings.From(options, suppressCrcErrors: false);
+        var payload = new byte[] { 0x41, 0x0D, 0x0A, 0x42 };
+        var wire = new Crc(options).Append(payload);
+        using var delivered = new ManualResetEventSlim();
+        DecodedMessage? received = null;
+        using var pipeline = new SerialMessagePipeline(
+            transport,
+            settings.CreateMessageDecoder(),
+            message => { received = message; delivered.Set(); },
+            TimeSpan.FromMilliseconds(25));
+
+        transport.EnqueueReceived(wire);
+        pipeline.SignalDataAvailable();
+
+        Assert.True(delivered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.NotNull(received);
+        Assert.True(received!.IntegrityValid);
+        Assert.Equal(payload, received.Payload.ToArray());
+        Assert.Equal(wire[..^1], received.Frame.ToArray());
+    }
 }
