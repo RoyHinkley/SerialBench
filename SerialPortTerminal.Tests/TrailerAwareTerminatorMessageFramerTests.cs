@@ -54,6 +54,27 @@ public sealed class TrailerAwareTerminatorMessageFramerTests
     }
 
     [Fact]
+    public void Long_payload_without_terminators_remains_chunk_invariant()
+    {
+        var options = TestCrc();
+        var payload = Enumerable.Repeat((byte)0x41, 8192).ToArray();
+        var wire = new Crc(options).Append(payload);
+        Assert.DoesNotContain(options.TermChar, payload);
+
+        var wholeFrames = new List<byte[]>();
+        var whole = CreateFramer(options);
+        whole.Consume(wire, frame => wholeFrames.Add(frame.ToArray()));
+
+        var byteFrames = new List<byte[]>();
+        var bytewise = CreateFramer(options);
+        foreach (var value in wire)
+            bytewise.Consume(new[] { value }, frame => byteFrames.Add(frame.ToArray()));
+
+        Assert.Equal(wire[..^1], Assert.Single(wholeFrames));
+        Assert.Equal(wholeFrames[0], Assert.Single(byteFrames));
+    }
+
+    [Fact]
     public void Bad_crc_with_intact_terminator_is_still_a_frame()
     {
         var options = TestCrc();
