@@ -7,6 +7,8 @@ namespace SerialPortTerminal.Serial.Protocol;
 /// A terminator normally establishes a message boundary whether or not the resulting frame passes integrity
 /// validation. Integrity is consulted only to resolve the protocol-defined ambiguity where a terminator-valued
 /// byte may instead belong to the trailer. A bad frame is therefore still a frame; validation belongs downstream.
+/// Each received byte is examined as a possible terminator at most once; previously rejected candidates are not
+/// rescanned as later bytes arrive.
 /// </remarks>
 public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
 {
@@ -14,6 +16,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     private readonly IMessageIntegrity integrity;
     private readonly List<byte> buffer = [];
     private int pendingTerminator = -1;
+    private int nextTerminatorSearch;
 
     public TrailerAwareTerminatorMessageFramer(byte terminator, IMessageIntegrity integrity)
     {
@@ -47,6 +50,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     {
         buffer.Clear();
         pendingTerminator = -1;
+        nextTerminatorSearch = 0;
     }
 
     private void Evaluate(Action<ReadOnlyMemory<byte>> frameReady)
@@ -59,23 +63,20 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
                 continue;
             }
 
-            var changed = false;
-            for (var index = 0; index < buffer.Count; index++)
+            while (nextTerminatorSearch < buffer.Count)
             {
+                var index = nextTerminatorSearch++;
                 if (buffer[index] != terminator)
                     continue;
 
                 if (TryEmitCandidate(index, frameReady))
-                {
-                    changed = true;
                     break;
-                }
 
                 if (pendingTerminator < 0)
                     pendingTerminator = index;
             }
 
-            if (!changed)
+            if (nextTerminatorSearch >= buffer.Count)
                 return;
         }
     }
@@ -90,8 +91,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
             return false;
 
         frameReady(candidate);
-        buffer.RemoveRange(0, terminatorIndex + 1);
-        pendingTerminator = -1;
+        RemoveThrough(terminatorIndex);
         return true;
     }
 
@@ -99,7 +99,14 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     {
         var frame = buffer.GetRange(0, pendingTerminator).ToArray();
         frameReady(frame);
-        buffer.RemoveRange(0, pendingTerminator + 1);
+        RemoveThrough(pendingTerminator);
+    }
+
+    private void RemoveThrough(int terminatorIndex)
+    {
+        var removed = terminatorIndex + 1;
+        buffer.RemoveRange(0, removed);
         pendingTerminator = -1;
+        nextTerminatorSearch = Math.Max(0, nextTerminatorSearch - removed);
     }
 }
