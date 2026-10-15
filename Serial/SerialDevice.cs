@@ -194,7 +194,7 @@ public sealed class SerialDevice : IDisposable
     {
         var signature = $"{e.GetType().FullName}: {e.Message}";
         if (!StringComparer.Ordinal.Equals(signature, recoveryFailureSignature)) { recoveryFailureSignature = signature; repeatedRecoveryFailures = 1; Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); return; }
-        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("recovery continues after 4 identical failures; further identical failures will be suppressed until the result changes.");
+        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("recovery attempts continue after 4 identical failures; further identical failures will be suppressed until the result changes.");
     }
 
     private void CreateCommsSession()
