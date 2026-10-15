@@ -21,13 +21,14 @@ internal sealed class SerialMessagePipeline : IDisposable
         Action<Exception>? receiveError = null,
         Action<Exception>? consumerError = null,
         Action<int>? bytesAcquired = null,
+        Action<DecodedMessage>? messageDecoded = null,
         int acquisitionBufferSize = 4096)
     {
         ArgumentNullException.ThrowIfNull(transport);
         ArgumentNullException.ThrowIfNull(decoder);
         ArgumentNullException.ThrowIfNull(messageReceived);
 
-        dispatch = new MessageDispatchQueue(decoder, messageReceived, consumerError);
+        dispatch = new MessageDispatchQueue(decoder, messageReceived, consumerError, messageDecoded);
         acquirer = new SerialReceiveAcquirer(
             transport,
             bytes =>
@@ -67,8 +68,6 @@ internal sealed class SerialMessagePipeline : IDisposable
     {
         if (disposed) return;
         disposed = true;
-
-        // Stop acquisition before closing dispatch so no receive worker can enqueue after dispatch disposal.
         receivePump.Dispose();
         dispatch.Dispose();
     }
