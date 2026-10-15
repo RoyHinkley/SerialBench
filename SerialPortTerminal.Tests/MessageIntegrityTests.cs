@@ -47,14 +47,14 @@ public sealed class MessageIntegrityTests
     }
 
     [Fact]
-    public void Crc_integrity_rejects_corruption()
+    public void Crc_integrity_rejects_corruption_without_discarding_candidate_payload()
     {
         var integrity = new Crc16MessageIntegrity(AeonLikeCrc());
         var frame = integrity.Append(new byte[] { 0x10, 0x20, 0x30 });
         frame[1] ^= 0x01;
 
         Assert.False(integrity.TryValidate(frame, out var decoded));
-        Assert.Empty(decoded);
+        Assert.Equal(new byte[] { 0x10, 0x21, 0x30 }, decoded);
     }
 
     [Fact]
