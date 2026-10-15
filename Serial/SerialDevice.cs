@@ -97,12 +97,18 @@ public sealed class SerialDevice : IDisposable
 
     public bool StageProtocolSettings(SerialProtocolSettings settings)
     {
-        ThrowIfDisposed(); ArgumentNullException.ThrowIfNull(settings);
-        lock (protocolLock)
+        ArgumentNullException.ThrowIfNull(settings);
+        lock (lifecycleLock)
         {
-            pendingProtocolSettings = settings;
-            if (receivePipeline is null) { ApplyProtocolSettings(settings); pendingProtocolSettings = null; return true; }
-            receivePipeline.StageDecoder(settings.CreateMessageDecoder(), () => ApplyStagedProtocolSettings(settings));
+            ThrowIfDisposed();
+            SerialMessagePipeline? pipeline;
+            lock (protocolLock)
+            {
+                pendingProtocolSettings = settings;
+                pipeline = receivePipeline;
+                if (pipeline is null) { ApplyProtocolSettings(settings); pendingProtocolSettings = null; return true; }
+            }
+            pipeline.StageDecoder(settings.CreateMessageDecoder(), () => ApplyStagedProtocolSettings(settings));
         }
         return true;
     }
@@ -194,7 +200,7 @@ public sealed class SerialDevice : IDisposable
     {
         var signature = $"{e.GetType().FullName}: {e.Message}";
         if (!StringComparer.Ordinal.Equals(signature, recoveryFailureSignature)) { recoveryFailureSignature = signature; repeatedRecoveryFailures = 1; Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); return; }
-        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("recovery attempts continue after 4 identical failures; further identical failures will be suppressed until the result changes.");
+        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("continuing recovery attempts despite 4 identical failures; further identical failures will be suppressed until the result changes.");
     }
 
     private void CreateCommsSession()
