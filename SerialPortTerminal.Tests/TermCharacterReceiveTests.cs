@@ -11,6 +11,13 @@ public sealed class TermCharacterReceiveTests
         TermChar = 0x03, OmitTermChar = false
     };
 
+    private static CrcOptions AeonTerminatedCrc() => new()
+    {
+        Polynomial = 0xDAAE, InitialValue = 0xFFFF, ExpectedResidue = 0x82C0,
+        PostInvert = true, MsBitFirst = false, MsByteFirst = false,
+        TermChar = 0x03, OmitTermChar = false
+    };
+
     [Fact]
     public void Parser_accepts_ordinary_valid_message()
     {
@@ -18,6 +25,37 @@ public sealed class TermCharacterReceiveTests
         using var harness = new ReceiveHarness(options); harness.Feed(new Crc(options).Append(payload));
         var received = harness.WaitForMessages(1).Single();
         Assert.True(received.CrcValid); Assert.Equal(payload, received.PayloadBytes.ToArray());
+    }
+
+    [Fact]
+    public void Aeon_crc_with_post_invert_and_term_character_is_decoded()
+    {
+        var options = AeonTerminatedCrc();
+        var payload = System.Text.Encoding.ASCII.GetBytes("r\r\n");
+        var wire = new Crc(options).Append(payload);
+        Assert.Equal(options.TermChar, wire[^1]);
+
+        using var harness = new ReceiveHarness(options); harness.Feed(wire);
+        var received = harness.WaitForMessages(1).Single();
+
+        Assert.True(received.CrcValid);
+        Assert.Equal(payload, received.PayloadBytes.ToArray());
+        Assert.Equal(options.ExpectedResidue, received.ExpectedResidue);
+        Assert.Equal(options.ExpectedResidue, received.CalculatedResidue);
+    }
+
+    [Fact]
+    public void Aeon_crc_allows_term_character_in_either_crc_byte()
+    {
+        var options = AeonTerminatedCrc();
+        foreach (var index in new[] { 3, 2 })
+        {
+            var (payload, wire) = FindCodeword(options, bytes => bytes[^index] == options.TermChar);
+            Assert.Equal(options.TermChar, wire[^1]);
+            using var harness = new ReceiveHarness(options); harness.Feed(wire);
+            var received = harness.WaitForMessages(1).Single();
+            Assert.True(received.CrcValid); Assert.Equal(payload, received.PayloadBytes.ToArray());
+        }
     }
 
     [Fact]
