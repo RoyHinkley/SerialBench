@@ -13,7 +13,10 @@ namespace SerialPortTerminal.Serial.Protocol;
 /// </remarks>
 public sealed class MessageDispatchQueue : IDisposable
 {
-    private readonly IMessageDecoder decoder;
+    private readonly object decoderLock = new();
+    private IMessageDecoder decoder;
+    private IMessageDecoder? pendingDecoder;
+    private Action? pendingDecoderApplied;
     private readonly Action<DecodedMessage> consumer;
     private readonly Action<Exception>? consumerError;
     private readonly ConcurrentQueue<DecodedMessage> queue = new();
@@ -34,19 +37,35 @@ public sealed class MessageDispatchQueue : IDisposable
     public void Consume(ReadOnlySpan<byte> bytes)
     {
         ThrowIfDisposed();
-        decoder.Consume(bytes, Enqueue);
+        lock (decoderLock) decoder.Consume(bytes, Enqueue);
     }
 
     public void SilenceElapsed()
     {
         ThrowIfDisposed();
-        decoder.SilenceElapsed(Enqueue);
+        lock (decoderLock) decoder.SilenceElapsed(Enqueue);
+    }
+
+    /// <summary>Stages a decoder for adoption immediately after the next decoded message boundary.</summary>
+    public void StageDecoder(IMessageDecoder replacement, Action? applied = null)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(replacement);
+        lock (decoderLock)
+        {
+            pendingDecoder = replacement;
+            pendingDecoderApplied = applied;
+        }
     }
 
     public void Reset()
     {
         ThrowIfDisposed();
-        decoder.Reset();
+        lock (decoderLock)
+        {
+            decoder.Reset();
+            ApplyPendingDecoder();
+        }
         while (queue.TryDequeue(out _)) { }
     }
 
@@ -55,6 +74,22 @@ public sealed class MessageDispatchQueue : IDisposable
         if (!active) return;
         queue.Enqueue(message);
         signal.Set();
+        ApplyPendingDecoder();
+    }
+
+    private void ApplyPendingDecoder()
+    {
+        if (pendingDecoder is null) return;
+        decoder = pendingDecoder;
+        pendingDecoder = null;
+        var applied = pendingDecoderApplied;
+        pendingDecoderApplied = null;
+        try { applied?.Invoke(); }
+        catch (Exception e)
+        {
+            try { consumerError?.Invoke(e); }
+            catch { /* Error reporting must not terminate receive decoding. */ }
+        }
     }
 
     private void Dispatch()
