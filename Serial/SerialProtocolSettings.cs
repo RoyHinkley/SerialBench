@@ -29,7 +29,7 @@ public sealed record SerialProtocolSettings(
     public CrcOptions? CreateCrcOptions() => !UseCrc ? null : new CrcOptions(
         InitialValue, Polynomial, ExpectedResidue, PostInvert, MsBitFirst, MsByteFirst, TermChar, OmitTermChar);
 
-    /// <summary>Creates the receive decoder represented by this legacy settings snapshot.</summary>
+    /// <summary>Creates the receive decoder represented by this settings snapshot.</summary>
     internal IMessageDecoder CreateMessageDecoder()
     {
         IMessageIntegrity integrity = UseCrc
@@ -42,12 +42,4 @@ public sealed record SerialProtocolSettings(
 
         return new MessageDecoder(framer, integrity);
     }
-
-    /// <summary>
-    /// Whether adopting this snapshot would require changing the receive worker's framing strategy.
-    /// Such a transition cannot be made between arbitrary bytes and therefore requires a reconnect until
-    /// the receive worker itself supports boundary-time strategy changes.
-    /// </summary>
-    public bool UsesSameFramingStrategyAs(SerialProtocolSettings other) =>
-        UseCrc == other.UseCrc && (!UseCrc || OmitTermChar == other.OmitTermChar);
 }
