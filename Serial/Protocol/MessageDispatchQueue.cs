@@ -8,7 +8,8 @@ namespace SerialPortTerminal.Serial.Protocol;
 /// <remarks>
 /// <see cref="Consume"/> and <see cref="SilenceElapsed"/> perform framing and integrity decoding synchronously,
 /// then enqueue completed messages. Consumer callbacks run only on the dispatch worker and therefore cannot
-/// stall transport notification, byte acquisition, or decoding.
+/// stall transport notification, byte acquisition, or decoding. Disposal stops accepting and dispatching new
+/// work without waiting for an arbitrary consumer callback to return.
 /// </remarks>
 public sealed class MessageDispatchQueue : IDisposable
 {
@@ -51,22 +52,35 @@ public sealed class MessageDispatchQueue : IDisposable
 
     private void Enqueue(DecodedMessage message)
     {
+        if (!active) return;
         queue.Enqueue(message);
         signal.Set();
     }
 
     private void Dispatch()
     {
-        while (active || !queue.IsEmpty)
+        try
         {
-            if (!queue.TryDequeue(out var message))
+            while (active)
             {
-                signal.WaitOne();
-                continue;
-            }
+                if (!queue.TryDequeue(out var message))
+                {
+                    signal.WaitOne();
+                    continue;
+                }
 
-            try { consumer(message); }
-            catch (Exception e) { consumerError?.Invoke(e); }
+                try { consumer(message); }
+                catch (Exception e)
+                {
+                    try { consumerError?.Invoke(e); }
+                    catch { /* Error reporting must not terminate the dispatch worker. */ }
+                }
+            }
+        }
+        finally
+        {
+            while (queue.TryDequeue(out _)) { }
+            signal.Dispose();
         }
     }
 
@@ -75,9 +89,11 @@ public sealed class MessageDispatchQueue : IDisposable
         if (disposed) return;
         disposed = true;
         active = false;
+        while (queue.TryDequeue(out _)) { }
         signal.Set();
-        if (worker != Thread.CurrentThread && worker.IsAlive) worker.Join();
-        signal.Dispose();
+        // Deliberately do not join. A consumer is application code and may block indefinitely;
+        // serial disconnect/disposal must never inherit that lifetime. The background worker
+        // exits and disposes its signal when any in-flight callback eventually returns.
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);

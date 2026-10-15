@@ -60,17 +60,50 @@ public sealed class MessageDispatchQueueTests
     }
 
     [Fact]
-    public void DisposeDrainsAlreadyDecodedMessages()
+    public void ErrorReporterExceptionsDoNotStopFollowingMessages()
     {
-        var messages = new List<byte>();
-        using (var dispatch = new MessageDispatchQueue(
+        using var delivered = new ManualResetEventSlim();
+        var calls = 0;
+        using var dispatch = new MessageDispatchQueue(
             new MessageDecoder(new TerminatorMessageFramer(0x03), NoMessageIntegrity.Instance),
-            message => messages.Add(message.Payload.Span[0])))
-        {
-            dispatch.Consume(new byte[] { 0x11, 0x03, 0x22, 0x03, 0x33, 0x03 });
-        }
+            _ =>
+            {
+                if (Interlocked.Increment(ref calls) == 1) throw new InvalidOperationException("consumer");
+                delivered.Set();
+            },
+            _ => throw new InvalidOperationException("reporter"));
 
-        Assert.Equal(new byte[] { 0x11, 0x22, 0x33 }, messages);
+        dispatch.Consume(new byte[] { 0x11, 0x03, 0x22, 0x03 });
+
+        Assert.True(delivered.Wait(TimeSpan.FromSeconds(2)));
+        Assert.Equal(2, Volatile.Read(ref calls));
+    }
+
+    [Fact]
+    public void DisposeDoesNotWaitForBlockedConsumerAndDropsQueuedMessages()
+    {
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var delivered = 0;
+        var dispatch = new MessageDispatchQueue(
+            new MessageDecoder(new TerminatorMessageFramer(0x03), NoMessageIntegrity.Instance),
+            _ =>
+            {
+                Interlocked.Increment(ref delivered);
+                entered.Set();
+                release.Wait();
+            });
+
+        dispatch.Consume(new byte[] { 0x11, 0x03 });
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+        dispatch.Consume(new byte[] { 0x22, 0x03 });
+
+        var disposed = Task.Run(dispatch.Dispose).Wait(TimeSpan.FromSeconds(1));
+
+        Assert.True(disposed);
+        release.Set();
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref delivered) == 1, TimeSpan.FromSeconds(1)));
+        Assert.Equal(1, Volatile.Read(ref delivered));
     }
 
     [Fact]
