@@ -72,9 +72,14 @@ public sealed class MessageDispatchQueue : IDisposable
         if (!active) return;
         try { decoded?.Invoke(message); }
         catch (Exception e) { ReportError(e); }
+
+        // The decoder callback is the exact message boundary. Adopt staged protocol state here,
+        // before the message is made visible to the asynchronous consumer, so callers observing
+        // ProtocolSettings after receipt see the settings for the next message.
+        ApplyPendingDecoder();
+
         queue.Enqueue(message);
         signal.Set();
-        ApplyPendingDecoder();
     }
 
     private void ApplyPendingDecoder()
