@@ -2,15 +2,7 @@ using System.Collections.Concurrent;
 
 namespace SerialPortTerminal.Serial.Protocol;
 
-/// <summary>
-/// Decouples deterministic message decoding from arbitrary consumer work.
-/// </summary>
-/// <remarks>
-/// <see cref="Consume"/> and <see cref="SilenceElapsed"/> perform framing and integrity decoding synchronously,
-/// then enqueue completed messages. Consumer callbacks run only on the dispatch worker and therefore cannot
-/// stall transport notification, byte acquisition, or decoding. Disposal stops accepting and dispatching new
-/// work without waiting for an arbitrary consumer callback to return.
-/// </remarks>
+/// <summary>Decouples deterministic message decoding from arbitrary consumer work.</summary>
 public sealed class MessageDispatchQueue : IDisposable
 {
     private readonly object decoderLock = new();
@@ -18,6 +10,7 @@ public sealed class MessageDispatchQueue : IDisposable
     private IMessageDecoder? pendingDecoder;
     private Action? pendingDecoderApplied;
     private readonly Action<DecodedMessage> consumer;
+    private readonly Action<DecodedMessage>? decoded;
     private readonly Action<Exception>? consumerError;
     private readonly ConcurrentQueue<DecodedMessage> queue = new();
     private readonly AutoResetEvent signal = new(false);
@@ -25,11 +18,16 @@ public sealed class MessageDispatchQueue : IDisposable
     private volatile bool active = true;
     private bool disposed;
 
-    public MessageDispatchQueue(IMessageDecoder decoder, Action<DecodedMessage> consumer, Action<Exception>? consumerError = null)
+    public MessageDispatchQueue(
+        IMessageDecoder decoder,
+        Action<DecodedMessage> consumer,
+        Action<Exception>? consumerError = null,
+        Action<DecodedMessage>? decoded = null)
     {
         this.decoder = decoder ?? throw new ArgumentNullException(nameof(decoder));
         this.consumer = consumer ?? throw new ArgumentNullException(nameof(consumer));
         this.consumerError = consumerError;
+        this.decoded = decoded;
         worker = new Thread(Dispatch) { Name = "serial message dispatch", IsBackground = true };
         worker.Start();
     }
@@ -72,6 +70,8 @@ public sealed class MessageDispatchQueue : IDisposable
     private void Enqueue(DecodedMessage message)
     {
         if (!active) return;
+        try { decoded?.Invoke(message); }
+        catch (Exception e) { ReportError(e); }
         queue.Enqueue(message);
         signal.Set();
         ApplyPendingDecoder();
@@ -85,11 +85,7 @@ public sealed class MessageDispatchQueue : IDisposable
         var applied = pendingDecoderApplied;
         pendingDecoderApplied = null;
         try { applied?.Invoke(); }
-        catch (Exception e)
-        {
-            try { consumerError?.Invoke(e); }
-            catch { /* Error reporting must not terminate receive decoding. */ }
-        }
+        catch (Exception e) { ReportError(e); }
     }
 
     private void Dispatch()
@@ -105,11 +101,7 @@ public sealed class MessageDispatchQueue : IDisposable
                 }
 
                 try { consumer(message); }
-                catch (Exception e)
-                {
-                    try { consumerError?.Invoke(e); }
-                    catch { /* Error reporting must not terminate the dispatch worker. */ }
-                }
+                catch (Exception e) { ReportError(e); }
             }
         }
         finally
@@ -117,6 +109,12 @@ public sealed class MessageDispatchQueue : IDisposable
             while (queue.TryDequeue(out _)) { }
             signal.Dispose();
         }
+    }
+
+    private void ReportError(Exception exception)
+    {
+        try { consumerError?.Invoke(exception); }
+        catch { /* Error reporting must not terminate receive decoding or dispatch. */ }
     }
 
     public void Dispose()
@@ -127,8 +125,7 @@ public sealed class MessageDispatchQueue : IDisposable
         while (queue.TryDequeue(out _)) { }
         signal.Set();
         // Deliberately do not join. A consumer is application code and may block indefinitely;
-        // serial disconnect/disposal must never inherit that lifetime. The background worker
-        // exits and disposes its signal when any in-flight callback eventually returns.
+        // serial disconnect/disposal must never inherit that lifetime.
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
