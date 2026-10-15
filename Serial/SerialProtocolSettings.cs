@@ -1,3 +1,5 @@
+using SerialPortTerminal.Serial.Protocol;
+
 namespace SerialPortTerminal.Serial;
 
 /// <summary>Immutable snapshot of settings that determine serial message framing and CRC behavior.</summary>
@@ -26,6 +28,20 @@ public sealed record SerialProtocolSettings(
     /// <summary>Creates a fresh mutable CRC options object for one transport operation.</summary>
     public CrcOptions? CreateCrcOptions() => !UseCrc ? null : new CrcOptions(
         InitialValue, Polynomial, ExpectedResidue, PostInvert, MsBitFirst, MsByteFirst, TermChar, OmitTermChar);
+
+    /// <summary>Creates the receive decoder represented by this legacy settings snapshot.</summary>
+    internal IMessageDecoder CreateMessageDecoder()
+    {
+        IMessageIntegrity integrity = UseCrc
+            ? new Crc16MessageIntegrity(CreateCrcOptions()!)
+            : NoMessageIntegrity.Instance;
+
+        IMessageFramer framer = UseCrc && !OmitTermChar
+            ? new TrailerAwareTerminatorMessageFramer(TermChar, integrity)
+            : new SilenceMessageFramer();
+
+        return new MessageDecoder(framer, integrity);
+    }
 
     /// <summary>
     /// Whether adopting this snapshot would require changing the receive worker's framing strategy.
