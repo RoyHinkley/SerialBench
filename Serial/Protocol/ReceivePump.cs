@@ -62,7 +62,7 @@ public sealed class ReceivePump : IDisposable
 
             acquiredVersion = version;
             try { acquireAvailable(); }
-            catch (Exception e) { acquisitionError?.Invoke(e); }
+            catch (Exception e) { ReportError(e); }
 
             while (active)
             {
@@ -81,10 +81,20 @@ public sealed class ReceivePump : IDisposable
                 {
                     silenceReportedVersion = acquiredVersion;
                     try { silenceElapsed(); }
-                    catch (Exception e) { acquisitionError?.Invoke(e); }
+                    catch (Exception e) { ReportError(e); }
                 }
                 break;
             }
+        }
+    }
+
+    private void ReportError(Exception exception)
+    {
+        if (acquisitionError is null) return;
+        try { acquisitionError(exception); }
+        catch
+        {
+            // Error reporting is observational. It must not terminate receive acquisition.
         }
     }
 
