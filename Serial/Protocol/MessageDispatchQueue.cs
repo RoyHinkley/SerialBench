@@ -35,7 +35,25 @@ public sealed class MessageDispatchQueue : IDisposable
     public void Consume(ReadOnlySpan<byte> bytes)
     {
         ThrowIfDisposed();
-        lock (decoderLock) decoder.Consume(bytes, Enqueue);
+        lock (decoderLock)
+        {
+            if (pendingDecoder is null)
+            {
+                decoder.Consume(bytes, Enqueue);
+                return;
+            }
+
+            // A staged decoder must take effect at the first message boundary even when the
+            // transport supplied bytes beyond that boundary in the same acquisition chunk.
+            // Feed only until that boundary while a replacement is pending, then let the new
+            // decoder consume the remainder as one block.
+            var offset = 0;
+            while (offset < bytes.Length && pendingDecoder is not null)
+                decoder.Consume(bytes.Slice(offset++, 1), Enqueue);
+
+            if (offset < bytes.Length)
+                decoder.Consume(bytes[offset..], Enqueue);
+        }
     }
 
     public void SilenceElapsed()
