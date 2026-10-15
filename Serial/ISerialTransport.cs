@@ -19,6 +19,7 @@ internal interface ISerialTransport : IDisposable
     /// <summary>True while the configured endpoint is currently enumerated by the operating system.</summary>
     bool IsAvailable { get; }
     bool IsOpen { get; }
+    int BytesToRead { get; }
     bool RtsEnable { get; set; }
     bool DtrEnable { get; set; }
     bool CtsHolding { get; }
@@ -92,6 +93,7 @@ internal sealed class SerialPortTransport : ISerialTransport
 
     public bool IsAvailable => SerialPort.GetPortNames().Contains(portName, StringComparer.OrdinalIgnoreCase);
     public bool IsOpen => port.IsOpen;
+    public int BytesToRead => port.BytesToRead;
     public bool RtsEnable { get => port.RtsEnable; set => port.RtsEnable = value; }
     public bool DtrEnable { get => port.DtrEnable; set => port.DtrEnable = value; }
     public bool CtsHolding => port.CtsHolding;

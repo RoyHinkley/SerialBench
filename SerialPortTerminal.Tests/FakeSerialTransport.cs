@@ -32,6 +32,8 @@ internal sealed class FakeSerialTransportFactory : ISerialTransportFactory
 
 internal sealed class FakeSerialTransport : ISerialTransport
 {
+    private readonly object receiveSync = new();
+    private readonly Queue<byte> receiveBytes = new();
     private SerialDataReceivedEventHandler? dataReceived;
     private SerialPinChangedEventHandler? pinChanged;
 
@@ -58,6 +60,7 @@ internal sealed class FakeSerialTransport : ISerialTransport
     public int PinChangedSubscriptions { get; private set; }
     public bool IsAvailable { get; set; } = true;
     public bool IsOpen { get; private set; }
+    public int BytesToRead { get { lock (receiveSync) return receiveBytes.Count; } }
     public bool RtsEnable { get; set; }
     public bool DtrEnable { get; set; }
     public bool CtsHolding { get; set; }
@@ -75,6 +78,14 @@ internal sealed class FakeSerialTransport : ISerialTransport
         add { pinChanged += value; PinChangedSubscriptions++; }
         remove { pinChanged -= value; PinChangedSubscriptions--; }
     }
+
+    public void EnqueueReceived(params byte[] bytes)
+    {
+        lock (receiveSync)
+            foreach (var value in bytes) receiveBytes.Enqueue(value);
+    }
+
+    public void RaiseDataReceived() => dataReceived?.Invoke(this, null!);
 
     public void Open()
     {
@@ -106,7 +117,12 @@ internal sealed class FakeSerialTransport : ISerialTransport
     {
         ReadCalls++;
         if (ReadException is not null) throw ReadException;
-        return 0;
+        lock (receiveSync)
+        {
+            var read = Math.Min(count, receiveBytes.Count);
+            for (var i = 0; i < read; i++) buffer[offset + i] = receiveBytes.Dequeue();
+            return read;
+        }
     }
 
     public void Write(byte[] buffer, int offset, int count)
