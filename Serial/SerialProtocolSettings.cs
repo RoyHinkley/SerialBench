@@ -29,6 +29,13 @@ public sealed record SerialProtocolSettings(
     public CrcOptions? CreateCrcOptions() => !UseCrc ? null : new CrcOptions(
         InitialValue, Polynomial, ExpectedResidue, PostInvert, MsBitFirst, MsByteFirst, TermChar, OmitTermChar);
 
+    /// <summary>Returns whether two snapshots use the same receive framing strategy.</summary>
+    public bool UsesSameFramingStrategyAs(SerialProtocolSettings other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return UseCrc == other.UseCrc && OmitTermChar == other.OmitTermChar;
+    }
+
     /// <summary>Creates the receive decoder represented by this settings snapshot.</summary>
     internal IMessageDecoder CreateMessageDecoder()
     {
