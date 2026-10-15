@@ -50,6 +50,13 @@ internal sealed class SerialMessagePipeline : IDisposable
         receivePump.SignalDataAvailable();
     }
 
+    /// <summary>Stages a decoder for adoption immediately after the next completed message.</summary>
+    public void StageDecoder(IMessageDecoder decoder, Action? applied = null)
+    {
+        ObjectDisposedException.ThrowIf(disposed, this);
+        dispatch.StageDecoder(decoder, applied);
+    }
+
     public void Reset()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
