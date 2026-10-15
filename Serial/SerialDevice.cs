@@ -100,7 +100,6 @@ public sealed class SerialDevice : IDisposable
         ThrowIfDisposed(); ArgumentNullException.ThrowIfNull(settings);
         lock (protocolLock)
         {
-            if (!protocolSettings.UsesSameFramingStrategyAs(settings)) return false;
             pendingProtocolSettings = settings;
             if (receivePipeline is null) { ApplyProtocolSettings(settings); pendingProtocolSettings = null; return true; }
             receivePipeline.StageDecoder(settings.CreateMessageDecoder(), () => ApplyStagedProtocolSettings(settings));
@@ -195,7 +194,7 @@ public sealed class SerialDevice : IDisposable
     {
         var signature = $"{e.GetType().FullName}: {e.Message}";
         if (!StringComparer.Ordinal.Equals(signature, recoveryFailureSignature)) { recoveryFailureSignature = signature; repeatedRecoveryFailures = 1; Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); return; }
-        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("recovery continues after 4 identical failures; further identical failures will be condensed."); else if (repeatedRecoveryFailures % 10 == 0) Error($"recovery still failing identically after {repeatedRecoveryFailures} attempts: {signature}");
+        repeatedRecoveryFailures++; if (repeatedRecoveryFailures <= 3) Error($"recovery attempt {RecoveryAttempts} failed: {signature}"); else if (repeatedRecoveryFailures == 4) Error("recovery continues after 4 identical failures; further identical failures will be suppressed until the result changes.");
     }
 
     private void CreateCommsSession()
