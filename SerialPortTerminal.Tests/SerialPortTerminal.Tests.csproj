@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SerialPortTerminal.csproj" />
+    <ProjectReference Include="..\SerialBench.csproj" />
+    <ProjectReference Include="..\SerialCommunications\SerialCommunications.csproj" />
   </ItemGroup>
 </Project>
