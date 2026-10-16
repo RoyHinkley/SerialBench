@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>SerialBench</AssemblyName>
     <RootNamespace>SerialBench</RootNamespace>
-    <ApplicationIcon>SerialPortTerminal.ico</ApplicationIcon>
+    <ApplicationIcon>SerialBench.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
