@@ -11,7 +11,7 @@ public sealed class ProtocolFramingTransitionTests
         var newOptions = AeonOptions(omitTermChar: false);
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
-        using var device = new SerialDevice(new SerialPortSettings("TEST", 115200), factory)
+        using var device = new SerialChannel(new SerialPortSettings("TEST", 115200), factory)
         {
             CrcConfig = oldOptions,
             MaximumMillisecondsSilenceInMessage = 5
@@ -59,7 +59,7 @@ public sealed class ProtocolFramingTransitionTests
 
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
-        using var device = new SerialDevice(new SerialPortSettings("TEST", 115200), factory) { CrcConfig = oldOptions };
+        using var device = new SerialChannel(new SerialPortSettings("TEST", 115200), factory) { CrcConfig = oldOptions };
         var received = new List<ReceivedData>();
         var sync = new object();
         device.DataReceived += data => { lock (sync) { received.Add(data); Monitor.PulseAll(sync); } };

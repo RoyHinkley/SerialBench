@@ -2,7 +2,7 @@ using SerialCommunications.Serial;
 
 namespace SerialBench.Tests;
 
-public sealed class SerialDeviceRecoveryTests
+public sealed class SerialChannelRecoveryTests
 {
     private static SerialPortSettings Settings() => new("TEST", 115200);
     private static SerialRecoveryPolicy FastRecovery(int maximumAttempts = -1) =>
@@ -15,7 +15,7 @@ public sealed class SerialDeviceRecoveryTests
         var failed = factory.Enqueue();
         failed.OpenException = new IOException("missing");
         var replacement = factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery() };
+        using var device = new SerialChannel(Settings(), factory) { RecoveryPolicy = FastRecovery() };
 
         Assert.False(device.Connect());
         Assert.True(SpinWait.SpinUntil(() => device.ConnectionState == SerialConnectionState.Connected, TimeSpan.FromSeconds(2)));
@@ -36,7 +36,7 @@ public sealed class SerialDeviceRecoveryTests
         var factory = new FakeSerialTransportFactory();
         var original = factory.Enqueue();
         var replacement = factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery() };
+        using var device = new SerialChannel(Settings(), factory) { RecoveryPolicy = FastRecovery() };
         var disconnectingEvents = 0;
         device.Disconnecting += (_, _) => disconnectingEvents++;
         Assert.True(device.Connect());
@@ -61,7 +61,7 @@ public sealed class SerialDeviceRecoveryTests
         var failed = factory.Enqueue();
         failed.OpenException = new IOException("missing");
         factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory)
+        using var device = new SerialChannel(Settings(), factory)
         {
             RecoveryPolicy = new SerialRecoveryPolicy(TimeSpan.FromMilliseconds(250))
         };
@@ -83,7 +83,7 @@ public sealed class SerialDeviceRecoveryTests
         var failed = factory.Enqueue();
         failed.OpenException = new IOException("missing");
         factory.Enqueue();
-        var device = new SerialDevice(Settings(), factory)
+        var device = new SerialChannel(Settings(), factory)
         {
             RecoveryPolicy = new SerialRecoveryPolicy(TimeSpan.FromMilliseconds(250))
         };
@@ -107,7 +107,7 @@ public sealed class SerialDeviceRecoveryTests
         var replacement = factory.Enqueue();
         using var openGate = new ManualResetEventSlim(false);
         replacement.OpenGate = openGate;
-        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery() };
+        using var device = new SerialChannel(Settings(), factory) { RecoveryPolicy = FastRecovery() };
         Assert.False(device.Connect());
         Assert.True(replacement.OpenEntered.Wait(TimeSpan.FromSeconds(2)));
 
@@ -133,7 +133,7 @@ public sealed class SerialDeviceRecoveryTests
             var transport = factory.Enqueue();
             transport.OpenException = new IOException("missing");
         }
-        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery(maximumAttempts: 2) };
+        using var device = new SerialChannel(Settings(), factory) { RecoveryPolicy = FastRecovery(maximumAttempts: 2) };
         Assert.False(device.Connect());
 
         Assert.True(SpinWait.SpinUntil(() => device.RecoveryAttempts == 2 && device.ConnectionState == SerialConnectionState.Unavailable && !device.RecoveryActive, TimeSpan.FromSeconds(2)));
@@ -149,7 +149,7 @@ public sealed class SerialDeviceRecoveryTests
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
         transport.WriteException = new IOException("isolated write failure");
-        using var device = new SerialDevice(Settings(), factory) { RecoveryPolicy = FastRecovery() };
+        using var device = new SerialChannel(Settings(), factory) { RecoveryPolicy = FastRecovery() };
         Assert.True(device.Connect());
 
         Assert.True(device.Command(new byte[] { 0x41 }));

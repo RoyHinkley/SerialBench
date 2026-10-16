@@ -33,7 +33,7 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     private int dataBits = 8;
     private StopBits stopBits = StopBits.One;
     private Handshake handshake = Handshake.None;
-    private SerialDevice.RtsModes rtsMode = SerialDevice.RtsModes.Enabled;
+    private SerialChannel.RtsModes rtsMode = SerialChannel.RtsModes.Enabled;
     private int millisecondsBetweenMessages = -1;
     private int millisecondsBetweenBytes = -1;
     private int maximumMillisecondsSilenceInMessage = 5;
@@ -62,7 +62,7 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     public int DataBits { get => dataBits; set => Set(ref dataBits, value); }
     public StopBits StopBits { get => stopBits; set => Set(ref stopBits, value); }
     public Handshake Handshake { get => handshake; set => Set(ref handshake, value); }
-    public SerialDevice.RtsModes RtsMode { get => rtsMode; set => Set(ref rtsMode, value); }
+    public SerialChannel.RtsModes RtsMode { get => rtsMode; set => Set(ref rtsMode, value); }
     public int MillisecondsBetweenMessages { get => millisecondsBetweenMessages; set => Set(ref millisecondsBetweenMessages, Math.Max(-1, value)); }
     public int MillisecondsBetweenBytes { get => millisecondsBetweenBytes; set => Set(ref millisecondsBetweenBytes, Math.Max(-1, value)); }
     public int MaximumMillisecondsSilenceInMessage { get => maximumMillisecondsSilenceInMessage; set => Set(ref maximumMillisecondsSilenceInMessage, Math.Max(0, value)); }

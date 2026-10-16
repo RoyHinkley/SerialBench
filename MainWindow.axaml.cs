@@ -31,7 +31,7 @@ public sealed partial class MainWindow : Window
         DataContext = configuration; InitializeComponent();
         BaudBox.ItemsSource = new[] { 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200 };
         ParityBox.ItemsSource = Enum.GetValues<Parity>(); DataBitsBox.ItemsSource = new[] { 5, 6, 7, 8 }; StopBitsBox.ItemsSource = new[] { StopBits.One, StopBits.OnePointFive, StopBits.Two };
-        HandshakeBox.ItemsSource = Enum.GetValues<Handshake>(); RtsBox.ItemsSource = Enum.GetValues<SerialDevice.RtsModes>(); ReceivedFormatBox.ItemsSource = new[] { ReceivedDataFormat.Text, ReceivedDataFormat.Bytes };
+        HandshakeBox.ItemsSource = Enum.GetValues<Handshake>(); RtsBox.ItemsSource = Enum.GetValues<SerialChannel.RtsModes>(); ReceivedFormatBox.ItemsSource = new[] { ReceivedDataFormat.Text, ReceivedDataFormat.Bytes };
         configuration.PropertyChanged += Configuration_PropertyChanged; configuration.Changed += Configuration_Changed; log.EntryRecorded += AppendDiagnostic;
         session.Log = log; session.DataReceived += ReceivedDataReceived; session.Connected += (_, _) => PostConnectionState(); session.Disconnecting += (_, _) => PostConnectionState(false);
         RefreshPorts(); ApplyDiagnosticWordWrap(); UpdateConnectionState(false); UpdateSignalDisplay(null); UpdateLogFileDisplay(); Closed += MainWindow_Closed;
@@ -44,8 +44,8 @@ public sealed partial class MainWindow : Window
         if (session.Ready) { session.Disconnect(); UpdateConnectionState(false); UpdateSignalDisplay(null); return; }
         SerialPortSettings portSettings; try { portSettings = configuration.CreatePortSettings(); } catch (InvalidOperationException e) { AppendDiagnostic(e.Message); return; }
         if (!configuration.TryCreateCrcOptions(out var crc, out var crcError)) { AppendDiagnostic(crcError!); return; }
-        EnsureSessionLog(); log.Record($"Connection configuration: {configuration.Describe()}"); session.SerialDevice?.Dispose();
-        var device = new SerialDevice(portSettings)
+        EnsureSessionLog(); log.Record($"Connection configuration: {configuration.Describe()}"); session.SerialChannel?.Dispose();
+        var device = new SerialChannel(portSettings)
         {
             RtsMode = configuration.RtsMode,
             CrcConfig = crc,
@@ -55,7 +55,7 @@ public sealed partial class MainWindow : Window
             MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes,
             MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage
         };
-        device.SignalsChanged += SignalsChanged; session.SerialDevice = device;
+        device.SignalsChanged += SignalsChanged; session.SerialChannel = device;
         session.LogEverything = configuration.IncludeDetailedTransportEvents; session.LogCommands = true; session.LogResponses = true;
         if (!session.Connect()) log.Record($"Unable to connect to {portSettings.PortName}."); UpdateConnectionState(session.Ready); if (!session.Ready) UpdateSignalDisplay(null);
     }
@@ -123,7 +123,7 @@ public sealed partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(TerminalConfiguration.DiagnosticWordWrap)) Dispatcher.UIThread.Post(ApplyDiagnosticWordWrap);
         else if (e.PropertyName == nameof(TerminalConfiguration.IncludeDetailedTransportEvents)) session.LogEverything = configuration.IncludeDetailedTransportEvents;
-        else if (e.PropertyName == nameof(TerminalConfiguration.LogSignals) && session.SerialDevice is { } signalDevice) signalDevice.LogSignals = configuration.LogSignals;
+        else if (e.PropertyName == nameof(TerminalConfiguration.LogSignals) && session.SerialChannel is { } signalDevice) signalDevice.LogSignals = configuration.LogSignals;
         else if (IsTimingProperty(e.PropertyName)) ApplyTimingConfiguration();
         else if (IsProtocolProperty(e.PropertyName)) ApplyProtocolConfiguration();
         else if (e.PropertyName is nameof(TerminalConfiguration.ReceivedDataFormat) or nameof(TerminalConfiguration.ShowCrcBytes)) RerenderReceivedData();
@@ -135,7 +135,7 @@ public sealed partial class MainWindow : Window
 
     private void ApplyTimingConfiguration()
     {
-        if (session.SerialDevice is not { } device) return;
+        if (session.SerialChannel is not { } device) return;
         device.MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages;
         device.MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes;
         device.MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage;
@@ -150,7 +150,7 @@ public sealed partial class MainWindow : Window
 
     private void ApplyProtocolConfiguration()
     {
-        if (session.SerialDevice is not { } device || !session.Ready) return;
+        if (session.SerialChannel is not { } device || !session.Ready) return;
         if (!configuration.TryCreateProtocolSettings(out var protocol, out var error))
         {
             log.Record($"Protocol configuration not applied: {error}");
@@ -170,7 +170,7 @@ public sealed partial class MainWindow : Window
     private void PostConnectionState(bool? connected = null) => Dispatcher.UIThread.Post(() => UpdateConnectionState(connected ?? session.Ready));
     private void UpdateConnectionState(bool connected)
     {
-        var portName = session.SerialDevice?.PortSettings.PortName;
+        var portName = session.SerialChannel?.PortSettings.PortName;
         ConnectionStatus.Text = connected ? $"Connected: {portName}" : "Disconnected";
         Title = connected && !string.IsNullOrWhiteSpace(portName) ? $"{portName} - {ApplicationTitle}" : ApplicationTitle;
         ConnectButton.Content = connected ? "Disconnect" : "Connect";

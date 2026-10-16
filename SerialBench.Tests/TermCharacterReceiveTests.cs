@@ -139,7 +139,7 @@ public sealed class TermCharacterReceiveTests
     private sealed class ReceiveHarness : IDisposable
     {
         private const int WaitMilliseconds = 2000;
-        private readonly SerialDevice device;
+        private readonly SerialChannel device;
         private readonly FakeSerialTransport transport;
         private readonly List<ReceivedData> messages = [];
         private readonly object sync = new();
@@ -147,7 +147,7 @@ public sealed class TermCharacterReceiveTests
         public ReceiveHarness(CrcOptions options)
         {
             var factory = new FakeSerialTransportFactory(); transport = factory.Enqueue();
-            device = new SerialDevice(new SerialPortSettings("TEST", 115200), factory) { CrcConfig = options };
+            device = new SerialChannel(new SerialPortSettings("TEST", 115200), factory) { CrcConfig = options };
             device.DataReceived += OnDataReceived; Assert.True(device.Connect());
         }
 

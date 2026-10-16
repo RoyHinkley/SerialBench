@@ -11,7 +11,7 @@ public readonly record struct SerialSignalState(bool Rts, bool Cts, bool Dtr, bo
 }
 
 /// <summary>Coordinates serial transport ownership, message processing, pacing, recovery, and diagnostics.</summary>
-public sealed class SerialDevice : IDisposable
+public sealed class SerialChannel : IDisposable
 {
     private static readonly TimeSpan AvailabilityPollInterval = TimeSpan.FromMilliseconds(250);
     private static long instanceCount;
@@ -83,10 +83,10 @@ public sealed class SerialDevice : IDisposable
     private string? recoveryFailureSignature;
     private int repeatedRecoveryFailures;
 
-    public SerialDevice(SerialPortSettings portSettings) : this(portSettings, new SerialPortTransportFactory()) { }
-    internal SerialDevice(SerialPortSettings portSettings, ISerialTransportFactory transportFactory)
+    public SerialChannel(SerialPortSettings portSettings) : this(portSettings, new SerialPortTransportFactory()) { }
+    internal SerialChannel(SerialPortSettings portSettings, ISerialTransportFactory transportFactory)
     { PortSettings = portSettings ?? throw new ArgumentNullException(nameof(portSettings)); this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory)); }
-    public SerialDevice(string portName, int baudRate = 115200) : this(new SerialPortSettings(portName, baudRate)) { }
+    public SerialChannel(string portName, int baudRate = 115200) : this(new SerialPortSettings(portName, baudRate)) { }
 
     public bool Command(ReadOnlySpan<byte> command)
     {
@@ -129,7 +129,7 @@ public sealed class SerialDevice : IDisposable
         {
             port = transportFactory.Create(PortSettings, RtsMode); port.DataReceived += RxDetected; port.PinChanged += PinChanged; port.Open(); port.DiscardOutBuffer(); port.DiscardInBuffer();
             protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors); pendingProtocolSettings = null; CreateCommsSession(); active = true; txThread = StartThread(Transmit, "transmit"); ConnectionState = SerialConnectionState.Connected;
-            if (isRecoveryAttempt) { Log?.Record($"SerialDevice @{PortSettings.PortName} connection recovered after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s."); recoveryFailureSignature = null; repeatedRecoveryFailures = 0; }
+            if (isRecoveryAttempt) { Log?.Record($"SerialChannel @{PortSettings.PortName} connection recovered after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s."); recoveryFailureSignature = null; repeatedRecoveryFailures = 0; }
             else Trace("connected.");
             PublishSignals(true); Dispatch(Connected, nameof(Connected)); return true;
         }
@@ -180,7 +180,7 @@ public sealed class SerialDevice : IDisposable
                     }
                     if (ConnectionState != SerialConnectionState.Unavailable) continue;
                     SerialRecoveryPolicy policy;
-                    try { policy = RecoveryPolicy; if (!policy.AllowsAttempt(RecoveryAttempts, recoverySw.Elapsed)) { Log?.Record($"SerialDevice @{PortSettings.PortName} automatic recovery stopped after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s; connection remains requested and unavailable."); recoveryActive = false; break; } }
+                    try { policy = RecoveryPolicy; if (!policy.AllowsAttempt(RecoveryAttempts, recoverySw.Elapsed)) { Log?.Record($"SerialChannel @{PortSettings.PortName} automatic recovery stopped after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s; connection remains requested and unavailable."); recoveryActive = false; break; } }
                     catch (Exception e) { Error($"recovery policy invalid: {e.Message}"); recoveryActive = false; break; }
                     RecoveryAttempts++; TryAcquireTransport(true);
                 }
@@ -193,7 +193,7 @@ public sealed class SerialDevice : IDisposable
     }
 
     private void HandleTransportUnavailable()
-    { Log?.Record($"SerialDevice @{PortSettings.PortName} transport unavailable; preserving connection request and releasing transport."); StopWorkers(); ReleaseTransport(); lastSignalState = null; ConnectionState = SerialConnectionState.Unavailable; BeginRecoveryPeriod(); Dispatch(Disconnecting, nameof(Disconnecting)); }
+    { Log?.Record($"SerialChannel @{PortSettings.PortName} transport unavailable; preserving connection request and releasing transport."); StopWorkers(); ReleaseTransport(); lastSignalState = null; ConnectionState = SerialConnectionState.Unavailable; BeginRecoveryPeriod(); Dispatch(Disconnecting, nameof(Disconnecting)); }
 
     private void RecordRecoveryFailure(Exception e)
     {
@@ -208,7 +208,7 @@ public sealed class SerialDevice : IDisposable
         receivePipeline = new SerialMessagePipeline(port!, protocolSettings.CreateMessageDecoder(), HandleDecodedMessage, TimeSpan.FromMilliseconds(Math.Max(1, MaximumMillisecondsSilenceInMessage)), e => Error($"receive exception: {e}"), e => Error($"receive consumer exception: {e}"), OnBytesAcquired, _ => receivedSettings.Enqueue(protocolSettings));
     }
 
-    private Thread StartThread(ThreadStart action, string role) { var thread = new Thread(action) { Name = $"SerialDevice {instanceNumber} {role}", IsBackground = true }; thread.Start(); return thread; }
+    private Thread StartThread(ThreadStart action, string role) { var thread = new Thread(action) { Name = $"SerialChannel {instanceNumber} {role}", IsBackground = true }; thread.Start(); return thread; }
     private void StopWorkers()
     { active = false; txSignal.Set(); var pipeline = receivePipeline; receivePipeline = null; pipeline?.Dispose(); JoinWorker(txThread); txThread = null; transmitting = false; while (receivedSettings.TryDequeue(out _)) { } }
     private static void JoinWorker(Thread? thread) { if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive) thread.Join(); }
@@ -281,21 +281,21 @@ public sealed class SerialDevice : IDisposable
     }
 
     private void RxDetected(object sender, SerialDataReceivedEventArgs e) { ReceiveEvents++; try { receivePipeline?.SignalDataAvailable(); } catch (ObjectDisposedException) when (!active) { } }
-    private void PinChanged(object sender, SerialPinChangedEventArgs e) { if (LogSignals) Log?.Record($"SerialDevice @{PortSettings.PortName} pin changed: {e.EventType}"); PublishSignals(ring: e.EventType == SerialPinChange.Ring); }
+    private void PinChanged(object sender, SerialPinChangedEventArgs e) { if (LogSignals) Log?.Record($"SerialChannel @{PortSettings.PortName} pin changed: {e.EventType}"); PublishSignals(ring: e.EventType == SerialPinChange.Ring); }
     private void PublishSignals(bool force = false, bool ring = false)
     {
         var p = port; if (p?.IsOpen != true) return;
-        try { var state = new SerialSignalState(p.RtsEnable, p.CtsHolding, p.DtrEnable, p.DsrHolding, p.CDHolding, ring); if (!force && lastSignalState == state) return; lastSignalState = state; if (LogSignals) Log?.Record($"SerialDevice @{PortSettings.PortName} signals: {state}"); var handlers = SignalsChanged; if (handlers is null) return; foreach (Action<SerialSignalState> handler in handlers.GetInvocationList()) try { handler(state); } catch (Exception e) { Error($"signal handler exception: {e}"); } }
+        try { var state = new SerialSignalState(p.RtsEnable, p.CtsHolding, p.DtrEnable, p.DsrHolding, p.CDHolding, ring); if (!force && lastSignalState == state) return; lastSignalState = state; if (LogSignals) Log?.Record($"SerialChannel @{PortSettings.PortName} signals: {state}"); var handlers = SignalsChanged; if (handlers is null) return; foreach (Action<SerialSignalState> handler in handlers.GetInvocationList()) try { handler(state); } catch (Exception e) { Error($"signal handler exception: {e}"); } }
         catch (Exception e) { Error($"signal state exception: {e.Message}"); }
     }
 
     private void HandleCrcError() { ErrorCrc = true; CRCErrors++; }
     private void DispatchData(ReceivedData data) { var handlers = DataReceived; if (handlers is null) return; foreach (Action<ReceivedData> handler in handlers.GetInvocationList()) try { handler(data); } catch (Exception e) { Error($"data handler exception: {e}"); } }
     private void Dispatch(EventHandler? handlers, string name) { if (handlers is null) return; foreach (EventHandler handler in handlers.GetInvocationList()) try { handler(this, EventArgs.Empty); } catch (Exception e) { Error($"{name} handler exception: {e}"); } }
-    private void Trace(string message) { if (LogEverything) Log?.Record($"SerialDevice @{PortSettings.PortName} {message}"); }
-    private void Error(string message) => Log?.Record($"SerialDevice @{PortSettings.PortName} ERROR: {message}");
+    private void Trace(string message) { if (LogEverything) Log?.Record($"SerialChannel @{PortSettings.PortName} {message}"); }
+    private void Error(string message) => Log?.Record($"SerialChannel @{PortSettings.PortName} ERROR: {message}");
     private static void Drain(AutoResetEvent signal) { while (signal.WaitOne(0)) { } }
-    private void ThrowIfDisposed() { if (disposed) throw new ObjectDisposedException(nameof(SerialDevice)); }
+    private void ThrowIfDisposed() { if (disposed) throw new ObjectDisposedException(nameof(SerialChannel)); }
     public void Close() => Disconnect();
 
     public void Dispose()

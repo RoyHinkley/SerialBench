@@ -2,7 +2,7 @@ using SerialCommunications.Serial;
 
 namespace SerialBench.Tests;
 
-public sealed class SerialDeviceTransportLifecycleTests
+public sealed class SerialChannelTransportLifecycleTests
 {
     private static SerialPortSettings Settings() => new("TEST", 115200);
 
@@ -11,7 +11,7 @@ public sealed class SerialDeviceTransportLifecycleTests
     {
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         var disconnectingEvents = 0;
         device.Disconnecting += (_, _) => disconnectingEvents++;
 
@@ -44,7 +44,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         var transport = factory.Enqueue();
         using var writeGate = new ManualResetEventSlim(false);
         transport.WriteGate = writeGate;
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         Assert.True(device.Connect());
         Assert.True(device.Command(new byte[] { 0x41 }));
         Assert.True(transport.WriteEntered.Wait(TimeSpan.FromSeconds(2)));
@@ -66,7 +66,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
         transport.OpenException = new IOException("open failed");
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         var disconnectingEvents = 0;
         device.Disconnecting += (_, _) => disconnectingEvents++;
 
@@ -89,7 +89,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
         transport.DiscardInException = new IOException("discard failed");
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         var disconnectingEvents = 0;
         device.Disconnecting += (_, _) => disconnectingEvents++;
 
@@ -114,7 +114,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         transport.DiscardInException = new IOException("initialization failed");
         transport.CloseException = new IOException("close failed");
         transport.DisposeException = new IOException("dispose failed");
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
 
         Assert.False(device.Connect());
 
@@ -131,7 +131,7 @@ public sealed class SerialDeviceTransportLifecycleTests
     {
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         var disconnectingEvents = 0;
         device.Disconnecting += (_, _) => disconnectingEvents++;
         Assert.True(device.Connect());
@@ -152,7 +152,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
         transport.OpenException = new IOException("open failed");
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
         Assert.False(device.Connect());
 
         Assert.True(device.Disconnect());
@@ -170,7 +170,7 @@ public sealed class SerialDeviceTransportLifecycleTests
         var failed = factory.Enqueue();
         failed.OpenException = new IOException("missing");
         var replacement = factory.Enqueue();
-        using var device = new SerialDevice(Settings(), factory);
+        using var device = new SerialChannel(Settings(), factory);
 
         Assert.False(device.Connect());
         Assert.True(device.Connect());
@@ -187,7 +187,7 @@ public sealed class SerialDeviceTransportLifecycleTests
     {
         var factory = new FakeSerialTransportFactory();
         var transport = factory.Enqueue();
-        var device = new SerialDevice(Settings(), factory);
+        var device = new SerialChannel(Settings(), factory);
         Assert.True(device.Connect());
 
         device.Dispose();
@@ -206,7 +206,7 @@ public sealed class SerialDeviceTransportLifecycleTests
     public void Ordinary_operations_after_disposal_fail_predictably()
     {
         var factory = new FakeSerialTransportFactory();
-        var device = new SerialDevice(Settings(), factory);
+        var device = new SerialChannel(Settings(), factory);
         device.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => device.Connect());

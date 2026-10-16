@@ -2,7 +2,7 @@ using SerialCommunications.Serial.Protocol;
 
 namespace SerialCommunications.Serial;
 
-/// <summary>Adapts generic decoded messages to the diagnostic evidence retained by the legacy SerialDevice API.</summary>
+/// <summary>Adapts generic decoded messages to the diagnostic evidence retained by the legacy SerialChannel API.</summary>
 internal static class ReceivedDataAdapter
 {
     public static ReceivedData Create(DecodedMessage message, SerialProtocolSettings settings)

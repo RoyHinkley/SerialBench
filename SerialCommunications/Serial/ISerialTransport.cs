@@ -4,12 +4,12 @@ using System.Text;
 namespace SerialCommunications.Serial;
 
 /// <summary>
-/// Narrow boundary between <see cref="SerialDevice"/> and the OS serial-port implementation.
+/// Narrow boundary between <see cref="SerialChannel"/> and the OS serial-port implementation.
 /// </summary>
 /// <remarks>
-/// SerialDevice owns the transport instance. Implementations must release their underlying OS resources
+/// SerialChannel owns the transport instance. Implementations must release their underlying OS resources
 /// when disposed. Keeping this boundary small lets lifecycle and recovery behavior be fault-injected in
-/// tests without replacing the SerialDevice logic being tested.
+/// tests without replacing the SerialChannel logic being tested.
 /// </remarks>
 internal interface ISerialTransport : IDisposable
 {
@@ -37,12 +37,12 @@ internal interface ISerialTransport : IDisposable
 /// <summary>Creates one independently owned serial transport for an acquisition attempt.</summary>
 internal interface ISerialTransportFactory
 {
-    ISerialTransport Create(SerialPortSettings settings, SerialDevice.RtsModes rtsMode);
+    ISerialTransport Create(SerialPortSettings settings, SerialChannel.RtsModes rtsMode);
 }
 
 internal sealed class SerialPortTransportFactory : ISerialTransportFactory
 {
-    public ISerialTransport Create(SerialPortSettings settings, SerialDevice.RtsModes rtsMode)
+    public ISerialTransport Create(SerialPortSettings settings, SerialChannel.RtsModes rtsMode)
     {
         ArgumentNullException.ThrowIfNull(settings);
         return new SerialPortTransport(settings, rtsMode);
@@ -55,9 +55,9 @@ internal sealed class SerialPortTransport : ISerialTransport
     private readonly SerialPort port;
     private readonly string portName;
 
-    public SerialPortTransport(SerialPortSettings settings, SerialDevice.RtsModes rtsMode)
+    public SerialPortTransport(SerialPortSettings settings, SerialChannel.RtsModes rtsMode)
     {
-        if (rtsMode == SerialDevice.RtsModes.Toggle)
+        if (rtsMode == SerialChannel.RtsModes.Toggle)
             throw new NotSupportedException("RTS_CONTROL_TOGGLE has not yet been ported to the current .NET serial implementation.");
 
         portName = settings.PortName;
@@ -74,7 +74,7 @@ internal sealed class SerialPortTransport : ISerialTransport
             ReadTimeout = 20,
             WriteTimeout = 20,
             Encoding = Ascii8,
-            RtsEnable = rtsMode == SerialDevice.RtsModes.Enabled,
+            RtsEnable = rtsMode == SerialChannel.RtsModes.Enabled,
             DtrEnable = true
         };
     }

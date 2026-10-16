@@ -44,14 +44,14 @@ transport notification
        -> IMessageFramer
        -> IMessageIntegrity
     -> MessageDispatchQueue
-    -> SerialDevice / consumer
+    -> SerialChannel / consumer
 ```
 
 Transport notification only signals work. It must return essentially immediately. Acquisition and deterministic decoding occur promptly; arbitrary application work is dispatched away from transport/reception paths.
 
 Transport chunk boundaries have no protocol meaning. Protocol decoding must produce identical results for the same byte stream regardless of acquisition partitioning (whole frame, arbitrary splits, byte-at-a-time, multiple frames in one chunk, etc.).
 
-`SerialDevice` currently coordinates transport ownership, TX pacing, recovery, protocol settings, receive-pipeline composition, signals, and low-level diagnostics. `TerminalSession` is the SerialBench application boundary above it. The serial engine is independent of Avalonia.
+`SerialChannel` currently coordinates transport ownership, TX pacing, recovery, protocol settings, receive-pipeline composition, signals, and low-level diagnostics. `TerminalSession` is the SerialBench application boundary above it. The serial engine is independent of Avalonia.
 
 `TerminalConfiguration` is SerialBench's authoritative live configuration. The UI binds to it; sessions, diagnostics, and persistence consume it rather than interrogating controls.
 
@@ -76,7 +76,7 @@ Core invariant:
 The transport seam is intentional:
 
 ```text
-SerialDevice
+SerialChannel
      |
      v
 ISerialTransport
