@@ -7,7 +7,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialBench", "SerialBench.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialCommunications", "SerialCommunications\SerialCommunications.csproj", "{C6F7D934-6C9C-48E4-ABF8-A35A57D27B21}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialBench.Tests", "SerialPortTerminal.Tests\SerialPortTerminal.Tests.csproj", "{08B591A2-6A70-4CB7-B50C-9C7AB6702B74}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SerialBench.Tests", "SerialBench.Tests\SerialBench.Tests.csproj", "{08B591A2-6A70-4CB7-B50C-9C7AB6702B74}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

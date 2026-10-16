@@ -12,11 +12,11 @@
 
   <ItemGroup>
     <Compile Remove="SerialCommunications\**\*.cs" />
-    <Compile Remove="SerialPortTerminal.Tests\**\*.cs" />
+    <Compile Remove="SerialBench.Tests\**\*.cs" />
     <EmbeddedResource Remove="SerialCommunications\**\*" />
-    <EmbeddedResource Remove="SerialPortTerminal.Tests\**\*" />
+    <EmbeddedResource Remove="SerialBench.Tests\**\*" />
     <None Remove="SerialCommunications\**\*" />
-    <None Remove="SerialPortTerminal.Tests\**\*" />
+    <None Remove="SerialBench.Tests\**\*" />
   </ItemGroup>
 
   <ItemGroup>
