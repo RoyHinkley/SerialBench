@@ -11,8 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="SerialCommunications\**\*.cs" />
     <Compile Remove="SerialPortTerminal.Tests\**\*.cs" />
+    <EmbeddedResource Remove="SerialCommunications\**\*" />
     <EmbeddedResource Remove="SerialPortTerminal.Tests\**\*" />
+    <None Remove="SerialCommunications\**\*" />
     <None Remove="SerialPortTerminal.Tests\**\*" />
   </ItemGroup>
 
