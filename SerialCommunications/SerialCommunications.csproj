@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Serial\**\*.cs" Link="Serial\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Diagnostics\DiagnosticLog.cs" Link="Diagnostics\DiagnosticLog.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SerialPortTerminal.Tests" />
+  </ItemGroup>
+
+</Project>
