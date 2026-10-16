@@ -142,11 +142,15 @@ public sealed class MessageDispatchQueue : IDisposable
 
     public void Dispose()
     {
-        if (disposed) return;
-        disposed = true;
-        active = false;
-        while (queue.TryDequeue(out _)) { }
-        signal.Set();
+        lock (decoderLock)
+        {
+            if (disposed) return;
+            disposed = true;
+            active = false;
+            while (queue.TryDequeue(out _)) { }
+            if (worker.IsAlive)
+                signal.Set();
+        }
         // Deliberately do not join. A consumer is application code and may block indefinitely;
         // serial disconnect/disposal must never inherit that lifetime.
     }
