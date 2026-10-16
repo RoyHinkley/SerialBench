@@ -1,8 +1,9 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using SerialPortTerminal;
 
-namespace SerialPortTerminal;
+namespace SerialBench;
 
 public sealed partial class App : Avalonia.Application
 {

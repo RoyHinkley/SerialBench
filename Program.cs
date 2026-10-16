@@ -1,6 +1,6 @@
 using Avalonia;
 
-namespace SerialPortTerminal;
+namespace SerialBench;
 
 internal static class Program
 {
