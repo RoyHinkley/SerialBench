@@ -1,13 +1,13 @@
 using System.Text.Json;
 
-namespace SerialPortTerminal.Application;
+namespace SerialBench.Application;
 
 /// <summary>
 /// Persistent application preferences that are independent of any particular serial device.
 /// </summary>
 public sealed class AppSettings
 {
-    private const string SettingsFileName = "SerialPortTerminal.settings.json";
+    private const string SettingsFileName = "SerialBench.settings.json";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     /// <summary>
@@ -16,7 +16,7 @@ public sealed class AppSettings
     /// </summary>
     public string LogFolder { get; set; } = "Logs";
 
-    public string LogFilePrefix { get; set; } = "spt-";
+    public string LogFilePrefix { get; set; } = "serialbench-";
 
     public int LogFilesToKeep { get; set; } = 25;
 
@@ -56,7 +56,7 @@ public sealed class AppSettings
         if (string.IsNullOrWhiteSpace(LogFolder))
             LogFolder = "Logs";
         if (string.IsNullOrWhiteSpace(LogFilePrefix))
-            LogFilePrefix = "spt-";
+            LogFilePrefix = "serialbench-";
         LogFilesToKeep = Math.Max(1, LogFilesToKeep);
     }
 }
