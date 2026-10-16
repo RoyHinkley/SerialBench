@@ -11,8 +11,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Serial\**\*.cs" />
-    <Compile Remove="Diagnostics\DiagnosticLog.cs" />
     <Compile Remove="SerialPortTerminal.Tests\**\*.cs" />
     <EmbeddedResource Remove="SerialPortTerminal.Tests\**\*" />
     <None Remove="SerialPortTerminal.Tests\**\*" />
