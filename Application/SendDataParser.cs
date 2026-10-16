@@ -1,7 +1,7 @@
 using System.Globalization;
 using SerialPortTerminal.Serial;
 
-namespace SerialBench.Application;
+namespace SerialPortTerminal.Application;
 
 /// <summary>Converts terminal send expressions to their exact wire bytes.</summary>
 /// <remarks>
