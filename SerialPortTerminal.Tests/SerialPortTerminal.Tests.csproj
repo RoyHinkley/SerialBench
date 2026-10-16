@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <AssemblyName>SerialBench.Tests</AssemblyName>
+    <RootNamespace>SerialBench.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
