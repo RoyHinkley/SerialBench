@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace SerialBench.Application;
+namespace SerialPortTerminal.Application;
 
 /// <summary>
 /// Persistent application preferences that are independent of any particular serial device.
