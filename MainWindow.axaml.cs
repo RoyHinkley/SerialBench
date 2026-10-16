@@ -8,7 +8,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Ellipse = Avalonia.Controls.Shapes.Ellipse;
 using SerialBench.Application;
-using SerialBench.Application;
+using SerialBench.Diagnostics;
 using SerialCommunications.Serial;
 
 namespace SerialBench;
@@ -18,7 +18,7 @@ public sealed partial class MainWindow : Window
     private const string ApplicationTitle = "Serial Port Terminal";
     private readonly AppSettings settings = AppSettings.Load();
     private readonly TerminalConfiguration configuration = TerminalConfiguration.LoadLast();
-    private readonly SerialCommunications.Diagnostics.DiagnosticLog log = new();
+    private readonly DiagnosticLog log = new();
     private readonly TerminalSession session = new();
     private readonly List<string> commandHistory = [];
     private readonly List<ReceivedData> receivedData = [];
@@ -36,7 +36,7 @@ public sealed partial class MainWindow : Window
         session.Log = log; session.DataReceived += ReceivedDataReceived; session.Connected += (_, _) => PostConnectionState(); session.Disconnecting += (_, _) => PostConnectionState(false);
         RefreshPorts(); ApplyDiagnosticWordWrap(); UpdateConnectionState(false); UpdateSignalDisplay(null); UpdateLogFileDisplay(); Closed += MainWindow_Closed;
     }
-    private void RefreshPorts_Click(object? sender, RoutedEventArgs e) => RefreshPorts();
+    private void RefreshPorts_Click(object? sender, RoutedEventArgs eventArgs) => RefreshPorts();
     private void RefreshPorts() { var ports = SerialPort.GetPortNames().OrderBy(PortSortKey).ThenBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray(); PortBox.ItemsSource = ports; if (string.IsNullOrWhiteSpace(configuration.PortName)) configuration.PortName = ports.FirstOrDefault(); }
     private static int PortSortKey(string p) => p.StartsWith("COM", StringComparison.OrdinalIgnoreCase) && int.TryParse(p.AsSpan(3), out var n) ? n : int.MaxValue;
     private void Connect_Click(object? sender, RoutedEventArgs eventArgs)
@@ -45,18 +45,17 @@ public sealed partial class MainWindow : Window
         SerialPortSettings portSettings; try { portSettings = configuration.CreatePortSettings(); } catch (InvalidOperationException e) { AppendDiagnostic(e.Message); return; }
         if (!configuration.TryCreateCrcOptions(out var crc, out var crcError)) { AppendDiagnostic(crcError!); return; }
         EnsureSessionLog(); log.Record($"Connection configuration: {configuration.Describe()}"); session.SerialChannel?.Dispose();
-        var device = new SerialChannel(portSettings)
+        var channel = new SerialChannel(portSettings)
         {
             RtsMode = configuration.RtsMode,
             CrcConfig = crc,
             IgnoreCRCErrors = !configuration.SuppressCrcErrors,
-            LogSignals = configuration.LogSignals,
             MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages,
             MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes,
             MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage
         };
-        device.SignalsChanged += SignalsChanged; session.SerialChannel = device;
-        session.LogEverything = configuration.IncludeDetailedTransportEvents; session.LogCommands = true; session.LogResponses = true;
+        channel.SignalsChanged += SignalsChanged; session.SerialChannel = channel;
+        session.LogEverything = configuration.IncludeDetailedTransportEvents; session.LogNoisy = configuration.LogSignals;
         if (!session.Connect()) log.Record($"Unable to connect to {portSettings.PortName}."); UpdateConnectionState(session.Ready); if (!session.Ready) UpdateSignalDisplay(null);
     }
     private void EnsureSessionLog()
@@ -89,7 +88,6 @@ public sealed partial class MainWindow : Window
         var result = payload;
         if (configuration.ShowCrcBytes && !data.CrcBytes.IsEmpty)
         {
-            // CRC is protocol metadata, not text. Even printable CRC byte values must remain visibly binary.
             var crc = bytesMode ? SerialDataFormatter.ToByteString(data.CrcBytes.Span) : string.Concat(data.CrcBytes.Span.ToArray().Select(b => $"\\x{b:X2}"));
             result += (result.Length == 0 ? string.Empty : " ") + crc;
         }
@@ -123,7 +121,7 @@ public sealed partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(TerminalConfiguration.DiagnosticWordWrap)) Dispatcher.UIThread.Post(ApplyDiagnosticWordWrap);
         else if (e.PropertyName == nameof(TerminalConfiguration.IncludeDetailedTransportEvents)) session.LogEverything = configuration.IncludeDetailedTransportEvents;
-        else if (e.PropertyName == nameof(TerminalConfiguration.LogSignals) && session.SerialChannel is { } signalDevice) signalDevice.LogSignals = configuration.LogSignals;
+        else if (e.PropertyName == nameof(TerminalConfiguration.LogSignals)) session.LogNoisy = configuration.LogSignals;
         else if (IsTimingProperty(e.PropertyName)) ApplyTimingConfiguration();
         else if (IsProtocolProperty(e.PropertyName)) ApplyProtocolConfiguration();
         else if (e.PropertyName is nameof(TerminalConfiguration.ReceivedDataFormat) or nameof(TerminalConfiguration.ShowCrcBytes)) RerenderReceivedData();
@@ -135,10 +133,10 @@ public sealed partial class MainWindow : Window
 
     private void ApplyTimingConfiguration()
     {
-        if (session.SerialChannel is not { } device) return;
-        device.MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages;
-        device.MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes;
-        device.MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage;
+        if (session.SerialChannel is not { } channel) return;
+        channel.MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages;
+        channel.MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes;
+        channel.MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage;
     }
 
     private static bool IsProtocolProperty(string? propertyName) => propertyName is
@@ -150,13 +148,13 @@ public sealed partial class MainWindow : Window
 
     private void ApplyProtocolConfiguration()
     {
-        if (session.SerialChannel is not { } device || !session.Ready) return;
+        if (session.SerialChannel is not { } channel || !session.Ready) return;
         if (!configuration.TryCreateProtocolSettings(out var protocol, out var error))
         {
             log.Record($"Protocol configuration not applied: {error}");
             return;
         }
-        if (!device.StageProtocolSettings(protocol!))
+        if (!channel.StageProtocolSettings(protocol!))
             log.Record("Protocol configuration requires reconnect because the receive framing strategy changed.");
     }
 
