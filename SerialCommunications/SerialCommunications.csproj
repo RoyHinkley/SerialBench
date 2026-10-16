@@ -13,7 +13,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="SerialPortTerminal.Tests" />
+    <InternalsVisibleTo Include="SerialBench.Tests" />
   </ItemGroup>
 
 </Project>
