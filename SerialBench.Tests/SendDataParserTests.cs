@@ -1,6 +1,6 @@
-using SerialPortTerminal.Application;
+using SerialBench.Application;
 
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 public sealed class SendDataParserTests
 {

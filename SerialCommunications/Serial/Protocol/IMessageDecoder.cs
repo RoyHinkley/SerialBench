@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Incrementally converts received byte chunks into framed, integrity-checked messages.</summary>
 public interface IMessageDecoder

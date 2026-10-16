@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 /// <summary>A deterministic byte-level instrument model for protocol tests.</summary>
 public sealed class VirtualInstrument

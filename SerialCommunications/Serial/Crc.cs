@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 public sealed class CrcOptions
 {

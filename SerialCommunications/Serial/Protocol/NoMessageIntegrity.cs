@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Integrity strategy for protocols that carry payload bytes without an integrity field.</summary>
 public sealed class NoMessageIntegrity : IMessageIntegrity

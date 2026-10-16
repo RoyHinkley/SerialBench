@@ -1,6 +1,6 @@
-using SerialPortTerminal.Serial;
+using SerialCommunications.Serial;
 
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 public sealed class TermCharacterFramingTests
 {

@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Uses an explicitly reported receive-silence interval as an inferred message boundary.</summary>
 /// <remarks>

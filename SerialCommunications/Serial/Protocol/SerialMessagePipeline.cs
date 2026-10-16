@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Composes serial byte acquisition, message decoding, and isolated consumer dispatch.</summary>
 /// <remarks>

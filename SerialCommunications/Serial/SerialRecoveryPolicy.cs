@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Controls automatic attempts to restore a requested serial connection after transport loss.</summary>
 /// <param name="RetryInterval">Delay between recovery attempts.</param>

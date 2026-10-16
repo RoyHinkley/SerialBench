@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>
 /// Moves receive acquisition off the transport notification path and reports receive silence independently.

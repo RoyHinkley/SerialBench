@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>
 /// Formats serial data for human-facing diagnostic display and logging without changing the

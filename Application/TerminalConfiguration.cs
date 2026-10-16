@@ -4,9 +4,9 @@ using System.IO.Ports;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using SerialPortTerminal.Serial;
+using SerialCommunications.Serial;
 
-namespace SerialPortTerminal.Application;
+namespace SerialBench.Application;
 
 public enum ReceivedDataFormat
 {
@@ -25,7 +25,7 @@ public sealed class ConfigurationChangedEventArgs(string propertyName, object? o
 
 public sealed class TerminalConfiguration : INotifyPropertyChanged
 {
-    private const string LastConfigurationFileName = "SerialPortTerminal.configuration.json";
+    private const string LastConfigurationFileName = "SerialBench.configuration.json";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, Converters = { new JsonStringEnumConverter() } };
     private string? portName;
     private int baudRate = 115200;

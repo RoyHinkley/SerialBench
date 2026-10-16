@@ -1,35 +1,28 @@
-# SerialPortTerminal project notes
+# SerialBenchproject notes
 
 > Temporary working handoff. Keep only context needed to resume development effectively plus decisions/deferred work that must not be forgotten. This is not project history; Git already serves that purpose. Delete this file when the project is release-ready and move any remaining work to GitHub issues.
 
 ## Current checkpoint
 
-The existing Serial Port Terminal behavior has been rebuilt on a decomposed, tested serial architecture. Lifecycle/recovery, receive acquisition and decoding, framing/integrity, TX, live protocol staging, diagnostics, and the application boundary are in place. Real Windows USB loopback and unplug/replug recovery have been exercised successfully. The current tree compiles and all tests passed at the latest user checkpoint.
+We are in the midst of carving the SerialCommunications library out of the application, which has been renamed to SerialBench.
 
-We have reached a deliberate architectural boundary before extracting a reusable communications library or renaming/restructuring the application.
-
-**Next task: survey `RoyHinkley/RoyHacs.Core`, especially AeonHacs.Components, as the requirements corpus for the reusable communications stack.** The fork is current with upstream and is intentionally available for inspection/experimentation. Do not modify the upstream AeonHacs repository.
-
-The survey should identify every materially different serial-device use case and configuration represented by Components and its concrete implementations, including eccentricities. Use the results to design the upper reusable communications layer before carving a library out of SerialPortTerminal.
-
-Do not yet extract the library, rename the app/library/projects, detach SerialPortTerminal from its fork ancestry, or freeze the final project/namespace layout. Those decisions should follow the AeonHacs survey and resulting architecture discussion.
 
 ## Architectural intent
 
 There are two consumers of the intended reusable stack.
 
-### SPT
+### SerialBench
 
-SPT is evolving from a simple general-purpose COM terminal into an **interactive serial communications investigation and diagnostic instrument**. It remains able to send and receive arbitrary data manually, but is increasingly useful for diagnosing the communications system itself: exact wire evidence, framing/integrity, timing, recovery, signals, protocol configuration experiments, etc.
+SerialBench is evolving from a simple general-purpose COM terminal into an **interactive serial communications investigation and diagnostic instrument**. It remains able to send and receive arbitrary data manually, but is increasingly useful for diagnosing the communications system itself: exact wire evidence, framing/integrity, timing, recovery, signals, protocol configuration experiments, etc.
 
-SPT is effectively a configurable **shape-shifter** that can assume the communications identity of many different serial devices while remaining ignorant of their application language. Compared with an AeonHacs hardware Component:
+SerialBench is effectively a configurable **shape-shifter** that can assume the communications identity of many different serial devices while remaining ignorant of their application language. Compared with an AeonHacs hardware Component:
 
-1. SPT is a complete application rather than one hardware abstraction.
+1. SerialBench is a complete application rather than one hardware abstraction.
 2. Its configuration is changed live and it connects/disconnects on demand; a HacsComponent normally has one fixed configuration and system-managed lifetime.
-3. SPT does not understand the remote device's command language; a concrete HacsComponent embeds that knowledge.
-4. SPT exposes detailed diagnostic evidence for troubleshooting and profile development (for example: fastest reliable baud rate, whether a silence threshold helps, or why CRC fails); a HacsComponent is expected simply to operate and report meaningful failure.
+3. SerialBench does not understand the remote device's command language; a concrete HacsComponent embeds that knowledge.
+4. SerialBench exposes detailed diagnostic evidence for troubleshooting and profile development (for example: fastest reliable baud rate, whether a silence threshold helps, or why CRC fails); a HacsComponent is expected simply to operate and report meaningful failure.
 
-A configured SPT instance and a concrete HacsComponent should ultimately be capable of reaching the same hardware through substantially the same underlying communications machinery. The human supplies the conversation semantics in SPT; code supplies them in the Component.
+A configured SerialBench instance and a concrete HacsComponent should ultimately be capable of reaching the same hardware through substantially the same underlying communications machinery. The human supplies the conversation semantics in SerialBench; code supplies them in the Component.
 
 ### AeonHacs and other automated consumers
 
@@ -58,9 +51,9 @@ Transport notification only signals work. It must return essentially immediately
 
 Transport chunk boundaries have no protocol meaning. Protocol decoding must produce identical results for the same byte stream regardless of acquisition partitioning (whole frame, arbitrary splits, byte-at-a-time, multiple frames in one chunk, etc.).
 
-`SerialDevice` currently coordinates transport ownership, TX pacing, recovery, protocol settings, receive-pipeline composition, signals, and low-level diagnostics. `TerminalSession` is the SPT application boundary above it. The serial engine is independent of Avalonia.
+`SerialDevice` currently coordinates transport ownership, TX pacing, recovery, protocol settings, receive-pipeline composition, signals, and low-level diagnostics. `TerminalSession` is the SerialBench application boundary above it. The serial engine is independent of Avalonia.
 
-`TerminalConfiguration` is SPT's authoritative live configuration. The UI binds to it; sessions, diagnostics, and persistence consume it rather than interrogating controls.
+`TerminalConfiguration` is SerialBench's authoritative live configuration. The UI binds to it; sessions, diagnostics, and persistence consume it rather than interrogating controls.
 
 ## Transport lifecycle and recovery — settled
 
@@ -140,7 +133,7 @@ Timeouts/protocol retries and malformed responses are communications-health evid
 
 Responsibility boundary:
 
-> **The library provides communications mechanisms, state, events, and evidence. SPT decides what a human sees, records, summarizes, resets, or does with them.**
+> **The library provides communications mechanisms, state, events, and evidence. SerialBench decides what a human sees, records, summarizes, resets, or does with them.**
 
 Revisit existing diagnostic messaging before extraction. Development accumulated useful but possibly excessive narration. Prefer lower layers exposing facts/evidence once, with upper layers deciding presentation, rather than several layers logging the same event in different words. Raw wire evidence and interpreted conversation events must remain separable.
 
@@ -158,17 +151,17 @@ Legacy generic `Reset()` is also obsolete. Automatic transport recovery replaces
 
 ## Configuration and profiles
 
-The reusable library should provide the configuration model needed to describe communications behavior. SPT owns live editing, named-profile storage/persistence, UI defaults, and profile management.
+The reusable library should provide the configuration model needed to describe communications behavior. SerialBench owns live editing, named-profile storage/persistence, UI defaults, and profile management.
 
 Do not make Aeon CRC values magic library defaults. They may be supplied as an Aeon profile/configuration. Ensure the model can express every materially distinct configuration found in AeonHacs.Components and real derived implementations.
 
-SPT should eventually support a connection/profile name and use it in the UI/title (for example `COM3 - HC6`).
+SerialBench should eventually support a connection/profile name and use it in the UI/title (for example `COM3 - HC6`).
 
-## SPT-specific deferred work
+## SerialBench-specific deferred work
 
 These are application concerns, not reasons to contaminate the reusable library:
 
-- **Normalized data recording:** SPT should provide it, but transformation/normalization/recording is application responsibility; the library supplies faithful data/evidence.
+- **Normalized data recording:** SerialBench should provide it, but transformation/normalization/recording is application responsibility; the library supplies faithful data/evidence.
 - **Command history / Escape behavior:** UI/application behavior; revisit together with broader command-entry usability.
 - **Received-data presentation:** decide escaped/displayed/interpreted treatment of CR/LF/newline, tab, BEL and other control characters; possible selectable BEL sound; decide visual message separation. Presentation must never alter authoritative data.
 - **UI density/help:** reduce excessive control size/spacing; add useful hover/tooltip help. Command entry should convey `Enter sends. Up/Down recalls sent commands.` Avoid redundant help.
@@ -191,14 +184,13 @@ The accumulated naming words are **character cues, not proposed names**.
 
 Application cues such as *detective / doctor / analyzer / tester / spy / COM Spook* express the application's changed character: interactive investigation, diagnosis, experimentation, and manual communication. Avoid a name that implies only passive sniffing or only a simple terminal.
 
-Library cue *Serial Device Comm Stack* expresses infrastructure: reusable hardware-intimate communications machinery, not diagnostics. The library should be a natural dependency of both SPT and AeonHacs, not sound like merely "SPT's engine."
+Library cue *Serial Device Comm Stack* expresses infrastructure: reusable hardware-intimate communications machinery, not diagnostics. The library should be a natural dependency of both SerialBench and AeonHacs, not sound like merely "SerialBench's engine."
 
 Working briefs:
 
 - **Application:** an interactive serial communications investigation and diagnostic instrument.
 - **Library:** a reusable layered serial-device communications stack, from transport ownership through whatever common protocol/conversation services the AeonHacs survey justifies.
 
-After the survey and library-boundary design, deliberately choose application/library names, convert SerialPortTerminal from fork to standalone project, and choose final project/solution/namespace layout together. Do not perform these structural identity changes prematurely.
 
 ## Deployment
 
@@ -211,7 +203,7 @@ Properties/PublishProfiles/FolderProfile.pubxml
 Publish command:
 
 ```text
-dotnet publish SerialPortTerminal.csproj -p:PublishProfile=FolderProfile
+dotnet publish SerialBench.csproj -p:PublishProfile=FolderProfile
 ```
 
 ## Development rules

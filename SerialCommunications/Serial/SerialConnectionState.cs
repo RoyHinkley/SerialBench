@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Describes the availability of a requested serial transport.</summary>
 /// <remarks>

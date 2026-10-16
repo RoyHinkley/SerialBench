@@ -1,7 +1,7 @@
 using System.IO.Ports;
-using SerialPortTerminal.Serial;
+using SerialCommunications.Serial;
 
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 internal sealed class FakeSerialTransportFactory : ISerialTransportFactory
 {

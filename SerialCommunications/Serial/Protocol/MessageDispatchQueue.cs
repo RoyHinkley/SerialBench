@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Decouples deterministic message decoding from arbitrary consumer work.</summary>
 public sealed class MessageDispatchQueue : IDisposable

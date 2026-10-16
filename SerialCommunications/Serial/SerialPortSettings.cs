@@ -1,6 +1,6 @@
 using System.IO.Ports;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>
 /// Describes the settings required to open a serial port.

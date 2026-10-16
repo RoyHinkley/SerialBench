@@ -1,6 +1,6 @@
-using SerialPortTerminal.Serial.Protocol;
+using SerialCommunications.Serial.Protocol;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Adapts generic decoded messages to the diagnostic evidence retained by the legacy SerialDevice API.</summary>
 internal static class ReceivedDataAdapter

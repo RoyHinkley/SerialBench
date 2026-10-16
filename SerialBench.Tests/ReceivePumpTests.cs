@@ -1,6 +1,6 @@
-using SerialPortTerminal.Serial.Protocol;
+using SerialCommunications.Serial.Protocol;
 
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 public sealed class ReceivePumpTests
 {

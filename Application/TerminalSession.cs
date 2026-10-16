@@ -1,7 +1,7 @@
-using SerialPortTerminal.Diagnostics;
-using SerialPortTerminal.Serial;
+using SerialCommunications.Diagnostics;
+using SerialCommunications.Serial;
 
-namespace SerialPortTerminal.Application;
+namespace SerialBench.Application;
 
 /// <summary>Coordinates interactive command/response traffic over a <see cref="SerialDevice"/>.</summary>
 /// <remarks>The terminal/application boundary is byte-oriented. Conversion between human notation and bytes belongs outside this class.</remarks>

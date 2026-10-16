@@ -1,6 +1,6 @@
-using SerialPortTerminal.Serial.Protocol;
+using SerialCommunications.Serial.Protocol;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Immutable snapshot of settings that determine serial message framing and CRC behavior.</summary>
 /// <remarks>

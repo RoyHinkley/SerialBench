@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text;
 
-namespace SerialPortTerminal.Diagnostics;
+namespace SerialCommunications.Diagnostics;
 
 /// <summary>
 /// Ordered diagnostic log used to observe serial communications and transport behavior.
@@ -24,7 +24,7 @@ public sealed class DiagnosticLog : IDisposable
         worker = new Thread(ProcessEntries)
         {
             IsBackground = true,
-            Name = "SerialPortTerminal diagnostic log"
+            Name = "SerialCommunications diagnostic log"
         };
         worker.Start();
     }

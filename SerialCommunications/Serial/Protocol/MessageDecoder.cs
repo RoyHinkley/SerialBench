@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Composes independent framing and integrity strategies into a message decoder.</summary>
 public sealed class MessageDecoder(IMessageFramer framer, IMessageIntegrity integrity) : IMessageDecoder

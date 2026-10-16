@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Drains bytes already reported available by a serial transport and forwards them in blocks.</summary>
 /// <remarks>

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>Immutable data retained for one receive unit recognized by <see cref="SerialDevice"/>.</summary>
 /// <remarks>The received bytes and CRC diagnostics are evidence; presentation choices are deliberately kept outside this record.</remarks>

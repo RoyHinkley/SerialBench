@@ -1,7 +1,7 @@
-using SerialPortTerminal.Serial;
-using SerialPortTerminal.Serial.Protocol;
+using SerialCommunications.Serial;
+using SerialCommunications.Serial.Protocol;
 
-namespace SerialPortTerminal.Tests;
+namespace SerialBench.Tests;
 
 public sealed class MessageIntegrityTests
 {

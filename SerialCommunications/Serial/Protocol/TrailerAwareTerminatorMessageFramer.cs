@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>
 /// Frames a stream terminated by a reserved byte when that byte may also occur in a fixed-width trailer.

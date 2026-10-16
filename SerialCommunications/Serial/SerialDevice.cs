@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Ports;
-using SerialPortTerminal.Diagnostics;
-using SerialPortTerminal.Serial.Protocol;
+using SerialCommunications.Serial.Protocol;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 public readonly record struct SerialSignalState(bool Rts, bool Cts, bool Dtr, bool Dsr, bool Dcd, bool Ring)
 {
@@ -29,7 +28,7 @@ public sealed class SerialDevice : IDisposable
     public bool IgnoreCRCErrors { get; set; }
     public bool LogEverything { get; set; }
     public bool LogSignals { get; set; }
-    public DiagnosticLog? Log { get; set; }
+    public SerialCommunications.Diagnostics.DiagnosticLog? Log { get; set; }
     public SerialRecoveryPolicy RecoveryPolicy { get; set; } = SerialRecoveryPolicy.Default;
     public event EventHandler? Connected;
     public event EventHandler? Disconnecting;

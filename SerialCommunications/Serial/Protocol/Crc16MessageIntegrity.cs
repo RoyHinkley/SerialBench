@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>16-bit CRC integrity strategy independent of message framing.</summary>
 public sealed class Crc16MessageIntegrity : IMessageIntegrity

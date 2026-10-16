@@ -7,18 +7,18 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Ellipse = Avalonia.Controls.Shapes.Ellipse;
-using SerialPortTerminal.Application;
-using SerialPortTerminal.Diagnostics;
-using SerialPortTerminal.Serial;
+using SerialBench.Application;
+using SerialBench.Application;
+using SerialCommunications.Serial;
 
-namespace SerialPortTerminal;
+namespace SerialBench;
 
 public sealed partial class MainWindow : Window
 {
     private const string ApplicationTitle = "Serial Port Terminal";
     private readonly AppSettings settings = AppSettings.Load();
     private readonly TerminalConfiguration configuration = TerminalConfiguration.LoadLast();
-    private readonly DiagnosticLog log = new();
+    private readonly SerialCommunications.Diagnostics.DiagnosticLog log = new();
     private readonly TerminalSession session = new();
     private readonly List<string> commandHistory = [];
     private readonly List<ReceivedData> receivedData = [];

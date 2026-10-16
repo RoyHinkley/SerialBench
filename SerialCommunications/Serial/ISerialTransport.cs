@@ -1,7 +1,7 @@
 using System.IO.Ports;
 using System.Text;
 
-namespace SerialPortTerminal.Serial;
+namespace SerialCommunications.Serial;
 
 /// <summary>
 /// Narrow boundary between <see cref="SerialDevice"/> and the OS serial-port implementation.

@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:app="using:SerialPortTerminal.Application" xmlns:shapes="using:Avalonia.Controls.Shapes" x:Class="SerialPortTerminal.MainWindow" x:DataType="app:TerminalConfiguration" Title="Serial Port Terminal" Width="1180" Height="780" MinWidth="900" MinHeight="600">
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:app="using:SerialBench.Application" xmlns:shapes="using:Avalonia.Controls.Shapes" x:Class="SerialBench.MainWindow" x:DataType="app:TerminalConfiguration" Title="Serial Port Terminal" Width="1180" Height="780" MinWidth="900" MinHeight="600">
   <Window.Styles>
     <Style Selector="NumericUpDown.timing"><Setter Property="HorizontalContentAlignment" Value="Right" /><Setter Property="Width" Value="144" /><Setter Property="HorizontalAlignment" Value="Right" /></Style>
     <Style Selector="ComboBox.connectionValue"><Setter Property="HorizontalAlignment" Value="Right" /><Setter Property="MinWidth" Value="150" /></Style>

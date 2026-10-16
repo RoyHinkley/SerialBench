@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>
 /// Incrementally identifies protocol frames without depending on how the transport partitions received bytes.

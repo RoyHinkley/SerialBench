@@ -1,4 +1,4 @@
-namespace SerialPortTerminal.Serial.Protocol;
+namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Frames a byte stream at an explicit terminator byte.</summary>
 /// <remarks>
