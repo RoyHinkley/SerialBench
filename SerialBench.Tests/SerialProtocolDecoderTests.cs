@@ -9,7 +9,7 @@ public sealed class SerialProtocolDecoderTests
     public void Aeon_settings_decode_crc_terminated_message_and_preserve_text_content()
     {
         var options = TestCrcOptions(omitTermChar: false);
-        var settings = SerialProtocolSettings.From(options, suppressCrcErrors: false);
+        var settings = SerialProtocolSettings.From(options, suppressInvalidMessages: false);
         var decoder = settings.CreateMessageDecoder();
         var payload = new byte[] { (byte)'A', 0x0D, 0x0A, (byte)'B', 0x0A };
         var wire = new Crc(options).Append(payload);
@@ -18,7 +18,7 @@ public sealed class SerialProtocolDecoderTests
         decoder.Consume(wire, message => decoded = message);
 
         Assert.NotNull(decoded);
-        Assert.True(decoded!.IntegrityValid);
+        Assert.True(decoded!.CheckValid);
         Assert.Equal(payload, decoded.Payload.ToArray());
         Assert.Equal(wire[..^1], decoded.Frame.ToArray());
     }
@@ -27,7 +27,7 @@ public sealed class SerialProtocolDecoderTests
     public void Crc_without_terminator_uses_explicit_silence_boundary()
     {
         var options = TestCrcOptions(omitTermChar: true);
-        var settings = SerialProtocolSettings.From(options, suppressCrcErrors: false);
+        var settings = SerialProtocolSettings.From(options, suppressInvalidMessages: false);
         var decoder = settings.CreateMessageDecoder();
         var payload = new byte[] { 0x10, 0x20, 0x30 };
         var wire = new Crc(options).Append(payload);
@@ -38,14 +38,14 @@ public sealed class SerialProtocolDecoderTests
 
         decoder.SilenceElapsed(message => decoded = message);
         Assert.NotNull(decoded);
-        Assert.True(decoded!.IntegrityValid);
+        Assert.True(decoded!.CheckValid);
         Assert.Equal(payload, decoded.Payload.ToArray());
     }
 
     [Fact]
     public void No_crc_legacy_settings_use_silence_and_preserve_all_bytes()
     {
-        var settings = SerialProtocolSettings.From(null, suppressCrcErrors: false);
+        var settings = SerialProtocolSettings.From(null, suppressInvalidMessages: false);
         var decoder = settings.CreateMessageDecoder();
         var payload = new byte[] { 0x41, 0x0D, 0x0A, 0x03, 0x00, 0x42 };
         DecodedMessage? decoded = null;
@@ -55,7 +55,7 @@ public sealed class SerialProtocolDecoderTests
 
         decoder.SilenceElapsed(message => decoded = message);
         Assert.NotNull(decoded);
-        Assert.True(decoded!.IntegrityValid);
+        Assert.True(decoded!.CheckValid);
         Assert.Equal(payload, decoded.Payload.ToArray());
         Assert.Equal(payload, decoded.Frame.ToArray());
     }
