@@ -21,6 +21,17 @@ public sealed class SendDataParserTests
         Assert.Equal(original, parsed);
     }
 
+    [Fact]
+    public void Literal_text_is_ascii_only()
+    {
+        Assert.False(SendDataParser.TryParse("é", out var bytes, out var error));
+        Assert.Empty(bytes);
+        Assert.Contains("not ASCII", error);
+
+        Assert.True(SendDataParser.TryParse(@"\xE9", out bytes, out error), error);
+        Assert.Equal(new byte[] { 0xE9 }, bytes);
+    }
+
     [Theory]
     [InlineData(@"\x")]
     [InlineData(@"\x0")]
