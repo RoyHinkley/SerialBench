@@ -5,9 +5,8 @@ namespace SerialBench.Application;
 
 /// <summary>Converts terminal send expressions to their exact wire bytes.</summary>
 /// <remarks>
-/// Ordinary characters are deliberately restricted to one-byte values. Backslash escapes mark
-/// conversions from human-entered notation to bytes; no escape interpretation belongs in the
-/// serial transport itself.
+/// Literal text is ASCII only. Backslash escapes deliberately express arbitrary byte values;
+/// no general .NET string encoding and no escape interpretation belongs in the serial transport.
 /// </remarks>
 public static class SendDataParser
 {
@@ -20,7 +19,7 @@ public static class SendDataParser
             var c = expression[i];
             if (c != '\\')
             {
-                if (c > byte.MaxValue) { bytes = []; error = $"Character U+{(int)c:X4} at position {i + 1} cannot be represented as one byte."; return false; }
+                if (c > 0x7F) { bytes = []; error = $"Character U+{(int)c:X4} at position {i + 1} is not ASCII; use a byte escape such as \\xHH when an 8-bit value is required."; return false; }
                 result.Add((byte)c); continue;
             }
             var escapeStart = i;
