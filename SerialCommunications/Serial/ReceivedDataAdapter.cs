@@ -30,7 +30,7 @@ internal static class ReceivedDataAdapter
         return new ReceivedData(
             frame,
             payload,
-            message.IntegrityValid,
+            message.CheckValid,
             receivedCrc,
             calculatedResidue,
             settings.ExpectedResidue);
