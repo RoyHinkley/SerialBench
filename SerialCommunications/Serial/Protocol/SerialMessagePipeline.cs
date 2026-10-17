@@ -20,7 +20,7 @@ internal sealed class SerialMessagePipeline : IDisposable
         TimeSpan silenceInterval,
         Action<Exception>? receiveError = null,
         Action<Exception>? consumerError = null,
-        Action<ReadOnlyMemory<byte>>? bytesAcquired = null,
+        Action<int>? bytesAcquired = null,
         Action<DecodedMessage>? messageDecoded = null,
         int acquisitionBufferSize = 4096)
     {
@@ -33,7 +33,7 @@ internal sealed class SerialMessagePipeline : IDisposable
             transport,
             bytes =>
             {
-                bytesAcquired?.Invoke(bytes);
+                bytesAcquired?.Invoke(bytes.Length);
                 dispatch.Consume(bytes.Span);
             },
             acquisitionBufferSize);
