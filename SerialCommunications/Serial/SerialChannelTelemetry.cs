@@ -52,6 +52,7 @@ public sealed class SerialChannelTelemetry
     internal void RecordMessageReceived() => Interlocked.Increment(ref messagesReceived);
     internal void RecordMessageTransmitted() => Interlocked.Increment(ref messagesTransmitted);
     internal void RecordCheckFailure() => Interlocked.Increment(ref checkFailures);
+    internal void RecordIntegrityFailure() => RecordCheckFailure();
     internal void RecordReceiveNotification() => Interlocked.Increment(ref receiveNotifications);
     internal void RecordRecoveryAttempt() => Interlocked.Increment(ref recoveryAttempts);
     internal void RecordSuccessfulRecovery() => Interlocked.Increment(ref successfulRecoveries);
