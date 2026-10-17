@@ -4,30 +4,32 @@ namespace SerialCommunications.Serial.Protocol;
 /// Frames a stream terminated by a reserved byte when that byte may also occur in a fixed-width trailer.
 /// </summary>
 /// <remarks>
-/// A terminator normally establishes a message boundary whether or not the resulting frame passes integrity
-/// validation. Integrity is consulted only to resolve the protocol-defined ambiguity where a terminator-valued
-/// byte may instead belong to the trailer. A bad frame is therefore still a frame; validation belongs downstream.
+/// A terminator normally establishes a message boundary whether or not the resulting frame passes its check.
+/// The check is consulted only to resolve the protocol-defined ambiguity where a terminator-valued byte may
+/// instead belong to the trailer. A bad frame is therefore still a frame; checking belongs downstream.
 /// Each received byte is examined as a possible terminator at most once; previously rejected candidates are not
 /// rescanned as later bytes arrive.
 /// </remarks>
 public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
 {
     private readonly byte terminator;
-    private readonly IMessageIntegrity integrity;
+    private readonly IMessageCheck check;
     private readonly List<byte> buffer = [];
     private int pendingTerminator = -1;
     private int nextTerminatorSearch;
 
-    public TrailerAwareTerminatorMessageFramer(byte terminator, IMessageIntegrity integrity)
+    /// <summary>Creates a terminator framer whose fixed-width trailer is described by <paramref name="check"/>.</summary>
+    public TrailerAwareTerminatorMessageFramer(byte terminator, IMessageCheck check)
     {
-        ArgumentNullException.ThrowIfNull(integrity);
-        if (integrity.FieldLength <= 0)
-            throw new ArgumentException("Trailer-aware framing requires a non-empty fixed-width trailer.", nameof(integrity));
+        ArgumentNullException.ThrowIfNull(check);
+        if (check.FieldLength <= 0)
+            throw new ArgumentException("Trailer-aware framing requires a non-empty fixed-width trailer.", nameof(check));
 
         this.terminator = terminator;
-        this.integrity = integrity;
+        this.check = check;
     }
 
+    /// <inheritdoc />
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
@@ -39,6 +41,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
         }
     }
 
+    /// <inheritdoc />
     public void SilenceElapsed(Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
@@ -46,6 +49,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
             EmitAtPendingTerminator(frameReady);
     }
 
+    /// <inheritdoc />
     public void Reset()
     {
         buffer.Clear();
@@ -57,7 +61,7 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     {
         while (true)
         {
-            if (pendingTerminator >= 0 && buffer.Count - pendingTerminator - 1 > integrity.FieldLength)
+            if (pendingTerminator >= 0 && buffer.Count - pendingTerminator - 1 > check.FieldLength)
             {
                 EmitAtPendingTerminator(frameReady);
                 continue;
@@ -83,11 +87,11 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
 
     private bool TryEmitCandidate(int terminatorIndex, Action<ReadOnlyMemory<byte>> frameReady)
     {
-        if (terminatorIndex < integrity.FieldLength)
+        if (terminatorIndex < check.FieldLength)
             return false;
 
         var candidate = buffer.GetRange(0, terminatorIndex).ToArray();
-        if (!integrity.TryValidate(candidate, out var payload) || payload.Contains(terminator))
+        if (!check.TryValidate(candidate, out var payload) || payload.Contains(terminator))
             return false;
 
         frameReady(candidate);

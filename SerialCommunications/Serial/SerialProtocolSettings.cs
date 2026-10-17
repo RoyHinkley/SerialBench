@@ -2,7 +2,7 @@ using SerialCommunications.Serial.Protocol;
 
 namespace SerialCommunications.Serial;
 
-/// <summary>Immutable snapshot of settings that determine serial message framing and CRC behavior.</summary>
+/// <summary>Immutable snapshot of settings that determine serial message framing and checking behavior.</summary>
 /// <remarks>
 /// A snapshot is deliberately value-based: UI/configuration edits must never mutate protocol state that a
 /// transmit or receive operation is already using. A new snapshot can therefore be staged and adopted only
@@ -18,12 +18,16 @@ public sealed record SerialProtocolSettings(
     bool MsByteFirst,
     byte TermChar,
     bool OmitTermChar,
-    bool SuppressCrcErrors)
+    bool SuppressInvalidMessages)
 {
-    public static SerialProtocolSettings From(CrcOptions? crc, bool suppressCrcErrors) => crc is null
-        ? new(false, 0, 0, 0, false, false, false, 0, true, suppressCrcErrors)
+    [Obsolete("Use SuppressInvalidMessages.")]
+    public bool SuppressCrcErrors => SuppressInvalidMessages;
+
+    /// <summary>Creates a protocol snapshot from legacy CRC options and invalid-message delivery policy.</summary>
+    public static SerialProtocolSettings From(CrcOptions? crc, bool suppressInvalidMessages) => crc is null
+        ? new(false, 0, 0, 0, false, false, false, 0, true, suppressInvalidMessages)
         : new(true, crc.InitialValue, crc.Polynomial, crc.ExpectedResidue, crc.PostInvert,
-            crc.MsBitFirst, crc.MsByteFirst, crc.TermChar, crc.OmitTermChar, suppressCrcErrors);
+            crc.MsBitFirst, crc.MsByteFirst, crc.TermChar, crc.OmitTermChar, suppressInvalidMessages);
 
     /// <summary>Creates a fresh mutable CRC options object for one transport operation.</summary>
     public CrcOptions? CreateCrcOptions() => !UseCrc ? null : new CrcOptions(
@@ -39,14 +43,14 @@ public sealed record SerialProtocolSettings(
     /// <summary>Creates the receive decoder represented by this settings snapshot.</summary>
     internal IMessageDecoder CreateMessageDecoder()
     {
-        IMessageIntegrity integrity = UseCrc
-            ? new Crc16MessageIntegrity(CreateCrcOptions()!)
-            : NoMessageIntegrity.Instance;
+        IMessageCheck check = UseCrc
+            ? new Crc16MessageCheck(CreateCrcOptions()!)
+            : NoMessageCheck.Instance;
 
         IMessageFramer framer = UseCrc && !OmitTermChar
-            ? new TrailerAwareTerminatorMessageFramer(TermChar, integrity)
+            ? new TrailerAwareTerminatorMessageFramer(TermChar, check)
             : new SilenceMessageFramer();
 
-        return new MessageDecoder(framer, integrity);
+        return new MessageDecoder(framer, check);
     }
 }
