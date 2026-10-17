@@ -5,9 +5,9 @@ namespace SerialBench.Application;
 
 /// <summary>Converts terminal send expressions to their exact wire bytes.</summary>
 /// <remarks>
-/// Ordinary characters use the terminal's one-byte Latin-1 representation. Backslash escapes
-/// deliberately mark conversions from human-entered notation to bytes; no escape interpretation
-/// belongs in the serial transport itself.
+/// Ordinary characters are deliberately restricted to one-byte values. Backslash escapes mark
+/// conversions from human-entered notation to bytes; no escape interpretation belongs in the
+/// serial transport itself.
 /// </remarks>
 public static class SendDataParser
 {
@@ -54,5 +54,5 @@ public static class SendDataParser
     }
 
     /// <summary>Formats arbitrary bytes as an unambiguous terminal expression.</summary>
-    public static string Escape(ReadOnlySpan<byte> bytes) => SerialDataFormatter.ToEscapedText(bytes);
+    public static string Escape(ReadOnlySpan<byte> bytes) => BinaryDataFormatter.ToEscapedText(bytes);
 }
