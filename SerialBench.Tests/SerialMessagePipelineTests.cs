@@ -13,7 +13,7 @@ public sealed class SerialMessagePipelineTests
         DecodedMessage? received = null;
         using var pipeline = new SerialMessagePipeline(
             transport,
-            new MessageDecoder(new TerminatorMessageFramer(0x03), NoMessageIntegrity.Instance),
+            new MessageDecoder(new TerminatorMessageFramer(0x03), NoMessageCheck.Instance),
             message => { received = message; delivered.Set(); },
             TimeSpan.FromMilliseconds(100));
 
@@ -34,7 +34,7 @@ public sealed class SerialMessagePipelineTests
         DecodedMessage? received = null;
         using var pipeline = new SerialMessagePipeline(
             transport,
-            new MessageDecoder(new SilenceMessageFramer(), NoMessageIntegrity.Instance),
+            new MessageDecoder(new SilenceMessageFramer(), NoMessageCheck.Instance),
             message => { received = message; delivered.Set(); },
             TimeSpan.FromMilliseconds(25));
 
@@ -61,7 +61,7 @@ public sealed class SerialMessagePipelineTests
             TermChar = 0x03,
             OmitTermChar = false
         };
-        var settings = SerialProtocolSettings.From(options, suppressCrcErrors: false);
+        var settings = SerialProtocolSettings.From(options, suppressInvalidMessages: false);
         var payload = new byte[] { 0x41, 0x0D, 0x0A, 0x42 };
         var wire = new Crc(options).Append(payload);
         using var delivered = new ManualResetEventSlim();
@@ -77,7 +77,7 @@ public sealed class SerialMessagePipelineTests
 
         Assert.True(delivered.Wait(TimeSpan.FromSeconds(2)));
         Assert.NotNull(received);
-        Assert.True(received!.IntegrityValid);
+        Assert.True(received!.CheckValid);
         Assert.Equal(payload, received.Payload.ToArray());
         Assert.Equal(wire[..^1], received.Frame.ToArray());
     }
