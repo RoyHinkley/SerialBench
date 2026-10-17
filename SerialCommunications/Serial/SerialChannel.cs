@@ -23,9 +23,9 @@ public sealed class SerialChannel : IDisposable
     public int MillisecondsBetweenMessages { get; set; } = -1;
     public int MillisecondsBetweenBytes { get; set; } = -1;
     public int MaximumMillisecondsSilenceInMessage { get; set; } = 5;
-    public bool BinaryComms { get; set; }
     public bool IgnoreCRCErrors { get; set; }
     public SerialRecoveryPolicy RecoveryPolicy { get; set; } = SerialRecoveryPolicy.Default;
+    public SerialChannelTelemetry Telemetry { get; } = new();
 
     public event EventHandler? Connected;
     public event EventHandler? Disconnecting;
@@ -34,16 +34,6 @@ public sealed class SerialChannel : IDisposable
     public event Action<string, TraceFlags>? Trace;
     public event Action<string>? Error;
 
-    public uint ReceiveEvents { get; private set; }
-    public uint ETXCount { get; private set; }
-    public uint ResponseCount { get; private set; }
-    public uint TotalBytesRead { get; private set; }
-    public bool ErrorBufferOverflow { get; private set; }
-    public uint BufferOverflows { get; private set; }
-    public ushort RxCrcCode { get; private set; }
-    public bool ErrorCrc { get; private set; }
-    public uint CRCErrors { get; private set; }
-    public uint Resets { get; private set; }
     public double MillisecondsSinceLastTx => txSw.Elapsed.TotalMilliseconds;
     public double MillisecondsSinceLastRx => rxSw.Elapsed.TotalMilliseconds;
     public bool ConnectionRequested { get; private set; }
@@ -84,10 +74,21 @@ public sealed class SerialChannel : IDisposable
     private int repeatedRecoveryFailures;
 
     public SerialChannel(SerialPortSettings portSettings) : this(portSettings, new SerialPortTransportFactory()) { }
+    public SerialChannel(SerialChannelConfiguration configuration) : this(configuration, new SerialPortTransportFactory()) { }
     internal SerialChannel(SerialPortSettings portSettings, ISerialTransportFactory transportFactory)
     {
         PortSettings = portSettings ?? throw new ArgumentNullException(nameof(portSettings));
         this.transportFactory = transportFactory ?? throw new ArgumentNullException(nameof(transportFactory));
+    }
+    internal SerialChannel(SerialChannelConfiguration configuration, ISerialTransportFactory transportFactory)
+        : this((configuration ?? throw new ArgumentNullException(nameof(configuration))).PortSettings, transportFactory)
+    {
+        RtsMode = configuration.RtsMode;
+        MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages;
+        MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes;
+        MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage;
+        RecoveryPolicy = configuration.RecoveryPolicy;
+        ApplyProtocolSettings(configuration.ProtocolSettings);
     }
     public SerialChannel(string portName, int baudRate = 115200) : this(new SerialPortSettings(portName, baudRate)) { }
 
@@ -96,7 +97,7 @@ public sealed class SerialChannel : IDisposable
         ThrowIfDisposed();
         if (command.IsEmpty) return false;
         var bytes = command.ToArray();
-        ReportTrace($"received Command \"{SerialDataFormatter.ToEscapedText(bytes)}\"", TraceFlags.Detail);
+        ReportTrace($"received Command \"{BinaryDataFormatter.ToEscapedText(bytes)}\"", TraceFlags.Detail);
         commandQ.Enqueue(bytes);
         txSignal.Set();
         return Ready;
@@ -113,12 +114,7 @@ public sealed class SerialChannel : IDisposable
             {
                 pendingProtocolSettings = settings;
                 pipeline = receivePipeline;
-                if (pipeline is null)
-                {
-                    ApplyProtocolSettings(settings);
-                    pendingProtocolSettings = null;
-                    return true;
-                }
+                if (pipeline is null) { ApplyProtocolSettings(settings); pendingProtocolSettings = null; return true; }
             }
             pipeline.StageDecoder(settings.CreateMessageDecoder(), () => ApplyStagedProtocolSettings(settings));
         }
@@ -138,11 +134,11 @@ public sealed class SerialChannel : IDisposable
         }
     }
 
-    private bool TryAcquireTransport(bool isRecoveryAttempt)
+    private bool TryAcquireTransport(bool recovery)
     {
         ConnectionState = SerialConnectionState.Connecting;
-        if (!isRecoveryAttempt || repeatedRecoveryFailures < 3)
-            ReportTrace(isRecoveryAttempt ? "recovery connection attempt..." : "connecting...", isRecoveryAttempt ? TraceFlags.Detail : TraceFlags.None);
+        if (!recovery || repeatedRecoveryFailures < 3)
+            ReportTrace(recovery ? "recovery connection attempt..." : "connecting...", recovery ? TraceFlags.Detail : TraceFlags.None);
         try
         {
             port = transportFactory.Create(PortSettings, RtsMode);
@@ -157,8 +153,9 @@ public sealed class SerialChannel : IDisposable
             active = true;
             txThread = StartThread(Transmit, "transmit");
             ConnectionState = SerialConnectionState.Connected;
-            if (isRecoveryAttempt)
+            if (recovery)
             {
+                Telemetry.RecordSuccessfulRecovery();
                 ReportTrace($"connection recovered after {RecoveryAttempts} attempt{(RecoveryAttempts == 1 ? "" : "s")} and {recoverySw.Elapsed.TotalSeconds:0.0} s.");
                 recoveryFailureSignature = null;
                 repeatedRecoveryFailures = 0;
@@ -170,11 +167,11 @@ public sealed class SerialChannel : IDisposable
         }
         catch (Exception e)
         {
-            if (isRecoveryAttempt) RecordRecoveryFailure(e); else ReportError($"Connect failed: {e}");
+            if (recovery) RecordRecoveryFailure(e); else ReportError($"Connect failed: {e}");
             StopWorkers();
             ReleaseTransport();
             ConnectionState = SerialConnectionState.Unavailable;
-            if (!isRecoveryAttempt) BeginRecoveryPeriod();
+            if (!recovery) BeginRecoveryPeriod();
             return false;
         }
     }
@@ -200,7 +197,7 @@ public sealed class SerialChannel : IDisposable
         }
     }
 
-    public bool Reset() { ThrowIfDisposed(); ReportTrace("resetting..."); Disconnect(); Resets++; return Connect(); }
+    public bool Reset() { ThrowIfDisposed(); ReportTrace("resetting..."); Disconnect(); return Connect(); }
     public void WaitForIdle() { ThrowIfDisposed(); while (!Idle) Thread.Sleep(5); }
 
     private void StartConnectionMaintenance()
@@ -209,7 +206,6 @@ public sealed class SerialChannel : IDisposable
         recoveryActive = true;
         recoveryThread = StartThread(MaintainConnection, "connection_maintenance");
     }
-
     private void StopConnectionMaintenance()
     {
         recoveryActive = false;
@@ -217,7 +213,6 @@ public sealed class SerialChannel : IDisposable
         JoinWorker(recoveryThread);
         recoveryThread = null;
     }
-
     private void BeginRecoveryPeriod()
     {
         RecoveryAttempts = 0;
@@ -235,12 +230,7 @@ public sealed class SerialChannel : IDisposable
             while (recoveryActive)
             {
                 var delay = ConnectionState == SerialConnectionState.Unavailable ? RecoveryPolicy.RetryInterval : AvailabilityPollInterval;
-                if (delay <= TimeSpan.Zero)
-                {
-                    ReportError("recovery stopped: RetryInterval must be greater than zero.");
-                    recoveryActive = false;
-                    break;
-                }
+                if (delay <= TimeSpan.Zero) { ReportError("recovery stopped: RetryInterval must be greater than zero."); recoveryActive = false; break; }
                 recoverySignal.WaitOne(delay);
                 if (!recoveryActive) break;
                 if (!Monitor.TryEnter(lifecycleLock)) continue;
@@ -269,6 +259,7 @@ public sealed class SerialChannel : IDisposable
                     }
                     catch (Exception e) { ReportError($"recovery policy invalid: {e.Message}"); recoveryActive = false; break; }
                     RecoveryAttempts++;
+                    Telemetry.RecordRecoveryAttempt();
                     TryAcquireTransport(true);
                 }
                 finally { Monitor.Exit(lifecycleLock); }
@@ -295,10 +286,8 @@ public sealed class SerialChannel : IDisposable
         var signature = $"{e.GetType().FullName}: {e.Message}";
         if (!StringComparer.Ordinal.Equals(signature, recoveryFailureSignature))
         {
-            recoveryFailureSignature = signature;
-            repeatedRecoveryFailures = 1;
-            ReportError($"recovery attempt {RecoveryAttempts} failed: {signature}");
-            return;
+            recoveryFailureSignature = signature; repeatedRecoveryFailures = 1;
+            ReportError($"recovery attempt {RecoveryAttempts} failed: {signature}"); return;
         }
         repeatedRecoveryFailures++;
         if (repeatedRecoveryFailures <= 3) ReportError($"recovery attempt {RecoveryAttempts} failed: {signature}");
@@ -311,13 +300,8 @@ public sealed class SerialChannel : IDisposable
         transmitting = false;
         var crc = protocolSettings.CreateCrcOptions();
         txCrc = crc is null ? null : new Crc(crc);
-        ErrorBufferOverflow = ErrorCrc = false;
-        RxCrcCode = 0;
-        ResponseCount = 0;
         lastSignalState = null;
-        txSw.Reset();
-        rxSw.Reset();
-        Drain(txSignal);
+        txSw.Reset(); rxSw.Reset(); Drain(txSignal);
         while (receivedSettings.TryDequeue(out _)) { }
         receivePipeline = new SerialMessagePipeline(
             port!, protocolSettings.CreateMessageDecoder(), HandleDecodedMessage,
@@ -331,32 +315,20 @@ public sealed class SerialChannel : IDisposable
     private Thread StartThread(ThreadStart action, string role)
     {
         var thread = new Thread(action) { Name = $"SerialChannel {instanceNumber} {role}", IsBackground = true };
-        thread.Start();
-        return thread;
+        thread.Start(); return thread;
     }
-
     private void StopWorkers()
     {
-        active = false;
-        txSignal.Set();
-        var pipeline = receivePipeline;
-        receivePipeline = null;
-        pipeline?.Dispose();
-        JoinWorker(txThread);
-        txThread = null;
-        transmitting = false;
+        active = false; txSignal.Set();
+        var pipeline = receivePipeline; receivePipeline = null; pipeline?.Dispose();
+        JoinWorker(txThread); txThread = null; transmitting = false;
         while (receivedSettings.TryDequeue(out _)) { }
     }
-
-    private static void JoinWorker(Thread? thread)
-    {
-        if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive) thread.Join();
-    }
+    private static void JoinWorker(Thread? thread) { if (thread is not null && thread != Thread.CurrentThread && thread.IsAlive) thread.Join(); }
 
     private bool ReleaseTransport()
     {
-        var p = port;
-        port = null;
+        var p = port; port = null;
         if (p is null) return true;
         var success = true;
         try { p.DataReceived -= RxDetected; } catch (Exception e) { success = false; ReportError($"DataReceived unsubscribe exception: {e}"); }
@@ -365,7 +337,6 @@ public sealed class SerialChannel : IDisposable
         try { p.Dispose(); } catch (Exception e) { success = false; ReportError($"port dispose exception: {e}"); }
         return success;
     }
-
     private bool WorkersAlive => (txThread?.IsAlive ?? false) || receivePipeline is not null;
 
     private void Transmit()
@@ -373,31 +344,32 @@ public sealed class SerialChannel : IDisposable
         ReportTrace("starting Transmit thread.", TraceFlags.Detail);
         try
         {
-            byte[] tx = [];
-            var offset = 0;
-            txSw.Restart();
+            byte[] tx = []; var offset = 0; var messageReported = false; txSw.Restart();
             while (active)
             {
                 if (offset < tx.Length)
                 {
                     try
                     {
+                        if (!messageReported)
+                        {
+                            ReportTrace($"Transmit: {BinaryDataFormatter.ToHexBytes(tx)}");
+                            messageReported = true;
+                        }
                         if (MillisecondsBetweenBytes < 0)
                         {
                             if (MillisecondsSinceLastTx >= MillisecondsBetweenMessages)
                             {
-                                ReportTrace($"Transmit ({MillisecondsSinceLastTx:0} ms since last): {SerialDataFormatter.ToByteString(tx)}");
-                                port!.Write(tx, 0, tx.Length);
-                                txSw.Restart();
-                                offset = tx.Length;
+                                port!.Write(tx, 0, tx.Length); txSw.Restart(); offset = tx.Length;
+                                Telemetry.RecordMessageTransmitted();
                             }
                             else Thread.Sleep(1);
                         }
                         else if (MillisecondsSinceLastTx >= MillisecondsBetweenBytes)
                         {
-                            ReportTrace($"Transmit ({MillisecondsSinceLastTx:0} ms since last): {tx[offset]:X2}", TraceFlags.Detail);
-                            port!.Write(tx, offset++, 1);
-                            txSw.Restart();
+                            ReportTrace($"Transmit byte ({MillisecondsSinceLastTx:0} ms since last): {tx[offset]:X2}", TraceFlags.Detail);
+                            port!.Write(tx, offset++, 1); txSw.Restart();
+                            if (offset == tx.Length) Telemetry.RecordMessageTransmitted();
                         }
                         else Thread.Sleep(1);
                     }
@@ -408,9 +380,7 @@ public sealed class SerialChannel : IDisposable
                     transmitting = false;
                     if (commandQ.TryDequeue(out var command))
                     {
-                        offset = 0;
-                        tx = txCrc is null ? command : txCrc.Append(command);
-                        transmitting = true;
+                        offset = 0; tx = txCrc is null ? command : txCrc.Append(command); transmitting = true; messageReported = false;
                     }
                     else txSignal.WaitOne(1000);
                 }
@@ -420,32 +390,27 @@ public sealed class SerialChannel : IDisposable
         finally { ReportTrace("ending Transmit thread.", TraceFlags.Detail); }
     }
 
-    private void OnBytesAcquired(int count)
+    private void OnBytesAcquired(ReadOnlyMemory<byte> bytes)
     {
-        if (count <= 0) return;
-        TotalBytesRead += (uint)count;
+        if (bytes.IsEmpty) return;
+        Telemetry.RecordBytesReceived(bytes.Length);
         rxSw.Restart();
-        ReportTrace($"Receive {count} bytes (TotalBytesRead = {TotalBytesRead})", TraceFlags.Detail);
+        ReportTrace($"Acquired: {BinaryDataFormatter.ToHexBytes(bytes.Span)}", TraceFlags.Detail);
     }
 
     private void HandleDecodedMessage(DecodedMessage message)
     {
         if (!receivedSettings.TryDequeue(out var settings)) settings = protocolSettings;
         var data = ReceivedDataAdapter.Create(message, settings);
-        if (settings.UseCrc)
+        if (settings.UseCrc && !message.IntegrityValid)
         {
-            RxCrcCode = data.CalculatedResidue ?? 0;
-            if (!message.IntegrityValid)
-            {
-                HandleCrcError();
-                ReportError($"Receive: {SerialDataFormatter.ToEscapedText(data.WireBytes.Span)} [CRC Error]");
-                if (settings.SuppressCrcErrors) return;
-            }
-            if (!settings.OmitTermChar) ETXCount++;
+            Telemetry.RecordIntegrityFailure();
+            ReportError($"Receive: {BinaryDataFormatter.ToEscapedText(data.WireBytes.Span)} [CRC Error]");
+            if (settings.SuppressCrcErrors) return;
         }
-        ReportTrace($"Receive message: {SerialDataFormatter.ToEscapedText(data.PayloadBytes.Span)}");
+        ReportTrace($"Receive message: {BinaryDataFormatter.ToEscapedText(data.PayloadBytes.Span)}");
+        Telemetry.RecordMessageReceived();
         DispatchData(data);
-        ResponseCount++;
     }
 
     private void ApplyStagedProtocolSettings(SerialProtocolSettings settings)
@@ -453,19 +418,15 @@ public sealed class SerialChannel : IDisposable
         lock (protocolLock)
         {
             if (pendingProtocolSettings != settings) return;
-            ApplyProtocolSettings(settings);
-            pendingProtocolSettings = null;
+            ApplyProtocolSettings(settings); pendingProtocolSettings = null;
         }
         ReportTrace("applied staged protocol settings at message boundary.", TraceFlags.Detail);
     }
-
     private void ApplyProtocolSettings(SerialProtocolSettings settings)
     {
         protocolSettings = settings;
-        var crc = settings.CreateCrcOptions();
-        txCrc = crc is null ? null : new Crc(crc);
-        CrcConfig = crc;
-        IgnoreCRCErrors = !settings.SuppressCrcErrors;
+        var crc = settings.CreateCrcOptions(); txCrc = crc is null ? null : new Crc(crc);
+        CrcConfig = crc; IgnoreCRCErrors = !settings.SuppressCrcErrors;
     }
 
     internal ReceivedData DecodeSilenceFramedMessage(ReadOnlySpan<byte> wireBytes)
@@ -474,97 +435,70 @@ public sealed class SerialChannel : IDisposable
         IMessageIntegrity integrity = settings.UseCrc ? new Crc16MessageIntegrity(settings.CreateCrcOptions()!) : NoMessageIntegrity.Instance;
         var decoder = new MessageDecoder(new SilenceMessageFramer(), integrity);
         DecodedMessage? decoded = null;
-        decoder.Consume(wireBytes, m => decoded = m);
-        decoder.SilenceElapsed(m => decoded = m);
+        decoder.Consume(wireBytes, m => decoded = m); decoder.SilenceElapsed(m => decoded = m);
         return ReceivedDataAdapter.Create(decoded ?? throw new InvalidOperationException("Silence decoder produced no message."), settings);
     }
 
     private void RxDetected(object sender, SerialDataReceivedEventArgs e)
     {
-        ReceiveEvents++;
-        try { receivePipeline?.SignalDataAvailable(); }
-        catch (ObjectDisposedException) when (!active) { }
+        Telemetry.RecordReceiveNotification();
+        try { receivePipeline?.SignalDataAvailable(); } catch (ObjectDisposedException) when (!active) { }
     }
-
     private void PinChanged(object sender, SerialPinChangedEventArgs e)
     {
         ReportTrace($"pin changed: {e.EventType}", TraceFlags.Detail | TraceFlags.Noisy);
         PublishSignals(ring: e.EventType == SerialPinChange.Ring);
     }
-
     private void PublishSignals(bool force = false, bool ring = false)
     {
-        var p = port;
-        if (p?.IsOpen != true) return;
+        var p = port; if (p?.IsOpen != true) return;
         try
         {
             var state = new SerialSignalState(p.RtsEnable, p.CtsHolding, p.DtrEnable, p.DsrHolding, p.CDHolding, ring);
             if (!force && lastSignalState == state) return;
             lastSignalState = state;
             ReportTrace($"signals: {state}", TraceFlags.Detail | TraceFlags.Noisy);
-            var handlers = SignalsChanged;
-            if (handlers is null) return;
-            foreach (Action<SerialSignalState> handler in handlers.GetInvocationList())
-                try { handler(state); } catch (Exception e) { ReportError($"signal handler exception: {e}"); }
+            var handlers = SignalsChanged; if (handlers is null) return;
+            foreach (Action<SerialSignalState> handler in handlers.GetInvocationList()) try { handler(state); } catch (Exception e) { ReportError($"signal handler exception: {e}"); }
         }
         catch (Exception e) { ReportError($"signal state exception: {e.Message}"); }
     }
-
-    private void HandleCrcError() { ErrorCrc = true; CRCErrors++; }
-
     private void DispatchData(ReceivedData data)
     {
-        var handlers = DataReceived;
-        if (handlers is null) return;
-        foreach (Action<ReceivedData> handler in handlers.GetInvocationList())
-            try { handler(data); } catch (Exception e) { ReportError($"data handler exception: {e}"); }
+        var handlers = DataReceived; if (handlers is null) return;
+        foreach (Action<ReceivedData> handler in handlers.GetInvocationList()) try { handler(data); } catch (Exception e) { ReportError($"data handler exception: {e}"); }
     }
-
     private void Dispatch(EventHandler? handlers, string name)
     {
         if (handlers is null) return;
-        foreach (EventHandler handler in handlers.GetInvocationList())
-            try { handler(this, EventArgs.Empty); } catch (Exception e) { ReportError($"{name} handler exception: {e}"); }
+        foreach (EventHandler handler in handlers.GetInvocationList()) try { handler(this, EventArgs.Empty); } catch (Exception e) { ReportError($"{name} handler exception: {e}"); }
     }
-
     private void ReportTrace(string message, TraceFlags flags = TraceFlags.None)
     {
-        var handlers = Trace;
-        if (handlers is null) return;
+        var handlers = Trace; if (handlers is null) return;
         var entry = $"SerialChannel @{PortSettings.PortName} {message}";
-        foreach (Action<string, TraceFlags> handler in handlers.GetInvocationList())
-            try { handler(entry, flags); } catch { }
+        foreach (Action<string, TraceFlags> handler in handlers.GetInvocationList()) try { handler(entry, flags); } catch { }
     }
-
     private void ReportError(string message)
     {
-        var handlers = Error;
-        if (handlers is null) return;
+        var handlers = Error; if (handlers is null) return;
         var entry = $"SerialChannel @{PortSettings.PortName} ERROR: {message}";
-        foreach (Action<string> handler in handlers.GetInvocationList())
-            try { handler(entry); } catch { }
+        foreach (Action<string> handler in handlers.GetInvocationList()) try { handler(entry); } catch { }
     }
 
     private static void Drain(AutoResetEvent signal) { while (signal.WaitOne(0)) { } }
     private void ThrowIfDisposed() { if (disposed) throw new ObjectDisposedException(nameof(SerialChannel)); }
     public void Close() => Disconnect();
-
     public void Dispose()
     {
         lock (lifecycleLock)
         {
             if (disposed) return;
-            ConnectionRequested = false;
-            StopConnectionMaintenance();
+            ConnectionRequested = false; StopConnectionMaintenance();
             if (ConnectionState == SerialConnectionState.Connected) Dispatch(Disconnecting, nameof(Disconnecting));
             ConnectionState = SerialConnectionState.Disconnecting;
-            StopWorkers();
-            ReleaseTransport();
-            lastSignalState = null;
-            disposed = true;
-            ConnectionState = SerialConnectionState.Disposed;
-            txSignal.Dispose();
-            recoverySignal.Dispose();
+            StopWorkers(); ReleaseTransport(); lastSignalState = null; disposed = true;
+            ConnectionState = SerialConnectionState.Disposed; txSignal.Dispose(); recoverySignal.Dispose();
         }
     }
 }
