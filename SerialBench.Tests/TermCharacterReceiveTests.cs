@@ -66,7 +66,7 @@ public sealed class TermCharacterReceiveTests
         var payload = new byte[] { 0x41, 0x42, 0x43 }; var valid = new Crc(options).Append(payload);
         using var harness = new ReceiveHarness(options); harness.Feed(invalid.Concat(valid).ToArray());
         var received = harness.WaitForMessages(1);
-        Assert.Equal(payload, received.Last().PayloadBytes.ToArray()); Assert.True(harness.CrcErrors > 0);
+        Assert.Equal(payload, received.Last().PayloadBytes.ToArray()); Assert.True(harness.CheckFailures > 0);
     }
 
     [Fact]
@@ -151,7 +151,7 @@ public sealed class TermCharacterReceiveTests
             device.DataReceived += OnDataReceived; Assert.True(device.Connect());
         }
 
-        public uint CrcErrors => device.CRCErrors;
+        public long CheckFailures => device.Telemetry.CheckFailures;
         public SerialProtocolSettings ProtocolSettings => device.ProtocolSettings;
         public bool StageProtocolSettings(SerialProtocolSettings settings) => device.StageProtocolSettings(settings);
         public void Feed(ReadOnlySpan<byte> bytes) { transport.EnqueueReceived(bytes.ToArray()); transport.RaiseDataReceived(); }
