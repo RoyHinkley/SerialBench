@@ -20,10 +20,7 @@ public sealed record SerialProtocolSettings(
     bool OmitTermChar,
     bool SuppressInvalidMessages)
 {
-    [Obsolete("Use SuppressInvalidMessages.")]
-    public bool SuppressCrcErrors => SuppressInvalidMessages;
-
-    /// <summary>Creates a protocol snapshot from legacy CRC options and invalid-message delivery policy.</summary>
+    /// <summary>Creates a protocol snapshot from CRC options and invalid-message delivery policy.</summary>
     public static SerialProtocolSettings From(CrcOptions? crc, bool suppressInvalidMessages) => crc is null
         ? new(false, 0, 0, 0, false, false, false, 0, true, suppressInvalidMessages)
         : new(true, crc.InitialValue, crc.Polynomial, crc.ExpectedResidue, crc.PostInvert,
