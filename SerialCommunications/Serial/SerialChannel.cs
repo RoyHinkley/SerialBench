@@ -402,11 +402,11 @@ public sealed class SerialChannel : IDisposable
     {
         if (!receivedSettings.TryDequeue(out var settings)) settings = protocolSettings;
         var data = ReceivedDataAdapter.Create(message, settings);
-        if (settings.UseCrc && !message.IntegrityValid)
+        if (settings.UseCrc && !message.CheckValid)
         {
-            Telemetry.RecordIntegrityFailure();
-            ReportError($"Receive: {BinaryDataFormatter.ToEscapedText(data.WireBytes.Span)} [CRC Error]");
-            if (settings.SuppressCrcErrors) return;
+            Telemetry.RecordCheckFailure();
+            ReportError($"Receive check failed: {BinaryDataFormatter.ToEscapedText(data.WireBytes.Span)}");
+            if (settings.SuppressInvalidMessages) return;
         }
         ReportTrace($"Receive message: {BinaryDataFormatter.ToEscapedText(data.PayloadBytes.Span)}");
         Telemetry.RecordMessageReceived();
@@ -426,14 +426,14 @@ public sealed class SerialChannel : IDisposable
     {
         protocolSettings = settings;
         var crc = settings.CreateCrcOptions(); txCrc = crc is null ? null : new Crc(crc);
-        CrcConfig = crc; IgnoreCRCErrors = !settings.SuppressCrcErrors;
+        CrcConfig = crc; IgnoreCRCErrors = !settings.SuppressInvalidMessages;
     }
 
     internal ReceivedData DecodeSilenceFramedMessage(ReadOnlySpan<byte> wireBytes)
     {
         var settings = protocolSettings.UseCrc || CrcConfig is null ? protocolSettings : SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors);
-        IMessageIntegrity integrity = settings.UseCrc ? new Crc16MessageIntegrity(settings.CreateCrcOptions()!) : NoMessageIntegrity.Instance;
-        var decoder = new MessageDecoder(new SilenceMessageFramer(), integrity);
+        IMessageCheck check = settings.UseCrc ? new Crc16MessageCheck(settings.CreateCrcOptions()!) : NoMessageCheck.Instance;
+        var decoder = new MessageDecoder(new SilenceMessageFramer(), check);
         DecodedMessage? decoded = null;
         decoder.Consume(wireBytes, m => decoded = m); decoder.SilenceElapsed(m => decoded = m);
         return ReceivedDataAdapter.Create(decoded ?? throw new InvalidOperationException("Silence decoder produced no message."), settings);
