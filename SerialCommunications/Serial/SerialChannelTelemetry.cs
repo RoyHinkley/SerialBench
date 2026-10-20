@@ -18,7 +18,7 @@ public sealed class SerialChannelTelemetry
     /// <summary>Total bytes acquired from the serial transport.</summary>
     public long BytesReceived => Interlocked.Read(ref bytesReceived);
 
-    /// <summary>Total checked messages delivered to channel consumers.</summary>
+    /// <summary>Total messages decoded from the received byte stream, including invalid messages later suppressed from delivery.</summary>
     public long MessagesReceived => Interlocked.Read(ref messagesReceived);
 
     /// <summary>Total messages completely written to the serial transport.</summary>
