@@ -42,21 +42,12 @@ public sealed partial class MainWindow : Window
     private void Connect_Click(object? sender, RoutedEventArgs eventArgs)
     {
         if (session.Ready) { session.Disconnect(); UpdateConnectionState(false); UpdateSignalDisplay(null); return; }
-        SerialPortSettings portSettings; try { portSettings = configuration.CreatePortSettings(); } catch (InvalidOperationException e) { AppendDiagnostic(e.Message); return; }
-        if (!configuration.TryCreateCrcOptions(out var crc, out var crcError)) { AppendDiagnostic(crcError!); return; }
+        if (!configuration.TryCreateChannelConfiguration(out var channelConfiguration, out var configurationError)) { AppendDiagnostic(configurationError!); return; }
         EnsureSessionLog(); log.Record($"Connection configuration: {configuration.Describe()}"); session.SerialChannel?.Dispose();
-        var channel = new SerialChannel(portSettings)
-        {
-            RtsMode = configuration.RtsMode,
-            CrcConfig = crc,
-            IgnoreCRCErrors = !configuration.SuppressCrcErrors,
-            MillisecondsBetweenMessages = configuration.MillisecondsBetweenMessages,
-            MillisecondsBetweenBytes = configuration.MillisecondsBetweenBytes,
-            MaximumMillisecondsSilenceInMessage = configuration.MaximumMillisecondsSilenceInMessage
-        };
+        var channel = new SerialChannel(channelConfiguration!);
         channel.SignalsChanged += SignalsChanged; session.SerialChannel = channel;
         session.LogEverything = configuration.IncludeDetailedTransportEvents; session.LogNoisy = configuration.LogSignals;
-        if (!session.Connect()) log.Record($"Unable to connect to {portSettings.PortName}."); UpdateConnectionState(session.Ready); if (!session.Ready) UpdateSignalDisplay(null);
+        if (!session.Connect()) log.Record($"Unable to connect to {channelConfiguration!.PortSettings.PortName}."); UpdateConnectionState(session.Ready); if (!session.Ready) UpdateSignalDisplay(null);
     }
     private void EnsureSessionLog()
     {
