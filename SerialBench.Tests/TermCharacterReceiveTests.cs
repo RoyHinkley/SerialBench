@@ -65,8 +65,12 @@ public sealed class TermCharacterReceiveTests
         var invalid = new Crc(options).Append(new byte[] { 0x10, options.TermChar, 0x20, 0x30 });
         var payload = new byte[] { 0x41, 0x42, 0x43 }; var valid = new Crc(options).Append(payload);
         using var harness = new ReceiveHarness(options); harness.Feed(invalid.Concat(valid).ToArray());
-        var received = harness.WaitForMessages(1);
-        Assert.Equal(payload, received.Last().PayloadBytes.ToArray()); Assert.True(harness.CheckFailures > 0);
+        var received = harness.WaitForMessages(3);
+        Assert.False(received[0].CheckValid);
+        Assert.False(received[1].CheckValid);
+        Assert.True(received[2].CheckValid);
+        Assert.Equal(payload, received[2].PayloadBytes.ToArray());
+        Assert.Equal(2, harness.CheckFailures);
     }
 
     [Fact]
