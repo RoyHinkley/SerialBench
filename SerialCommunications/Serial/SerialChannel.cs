@@ -18,12 +18,10 @@ public sealed class SerialChannel : IDisposable
     public enum RtsModes { Enabled, Disabled, Toggle }
 
     public SerialPortSettings PortSettings { get; set; }
-    public CrcOptions? CrcConfig { get; set; }
     public RtsModes RtsMode { get; set; } = RtsModes.Enabled;
     public int MillisecondsBetweenMessages { get; set; } = -1;
     public int MillisecondsBetweenBytes { get; set; } = -1;
     public int MaximumMillisecondsSilenceInMessage { get; set; } = 5;
-    public bool IgnoreCRCErrors { get; set; }
     public SerialRecoveryPolicy RecoveryPolicy { get; set; } = SerialRecoveryPolicy.Default;
     public SerialChannelTelemetry Telemetry { get; } = new();
 
@@ -147,7 +145,6 @@ public sealed class SerialChannel : IDisposable
             port.Open();
             port.DiscardOutBuffer();
             port.DiscardInBuffer();
-            protocolSettings = SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors);
             pendingProtocolSettings = null;
             CreateCommsSession();
             active = true;
@@ -426,12 +423,11 @@ public sealed class SerialChannel : IDisposable
     {
         protocolSettings = settings;
         var crc = settings.CreateCrcOptions(); txCrc = crc is null ? null : new Crc(crc);
-        CrcConfig = crc; IgnoreCRCErrors = !settings.SuppressInvalidMessages;
     }
 
     internal ReceivedData DecodeSilenceFramedMessage(ReadOnlySpan<byte> wireBytes)
     {
-        var settings = protocolSettings.UseCrc || CrcConfig is null ? protocolSettings : SerialProtocolSettings.From(CrcConfig, !IgnoreCRCErrors);
+        var settings = protocolSettings;
         IMessageCheck check = settings.UseCrc ? new Crc16MessageCheck(settings.CreateCrcOptions()!) : NoMessageCheck.Instance;
         var decoder = new MessageDecoder(new SilenceMessageFramer(), check);
         DecodedMessage? decoded = null;
