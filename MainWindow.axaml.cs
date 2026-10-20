@@ -75,11 +75,11 @@ public sealed partial class MainWindow : Window
     private string FormatReceivedData(ReceivedData data)
     {
         var bytesMode = configuration.ReceivedDataFormat == ReceivedDataFormat.Bytes;
-        var payload = bytesMode ? SerialDataFormatter.ToByteString(data.PayloadBytes.Span) : SerialDataFormatter.ToEscapedText(data.PayloadBytes.Span);
+        var payload = bytesMode ? BinaryDataFormatter.ToHexBytes(data.PayloadBytes.Span) : BinaryDataFormatter.ToEscapedText(data.PayloadBytes.Span);
         var result = payload;
         if (configuration.ShowCrcBytes && !data.CrcBytes.IsEmpty)
         {
-            var crc = bytesMode ? SerialDataFormatter.ToByteString(data.CrcBytes.Span) : string.Concat(data.CrcBytes.Span.ToArray().Select(b => $"\\x{b:X2}"));
+            var crc = bytesMode ? BinaryDataFormatter.ToHexBytes(data.CrcBytes.Span) : string.Concat(data.CrcBytes.Span.ToArray().Select(b => $"\\x{b:X2}"));
             result += (result.Length == 0 ? string.Empty : " ") + crc;
         }
         if (data.CrcValid == false)
