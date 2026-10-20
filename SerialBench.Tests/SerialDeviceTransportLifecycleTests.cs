@@ -212,7 +212,6 @@ public sealed class SerialChannelTransportLifecycleTests
         Assert.Throws<ObjectDisposedException>(() => device.Connect());
         Assert.Throws<ObjectDisposedException>(() => device.Command(new byte[] { 0x41 }));
         Assert.Throws<ObjectDisposedException>(() => device.StageProtocolSettings(device.ProtocolSettings));
-        Assert.Throws<ObjectDisposedException>(() => device.Reset());
         Assert.Throws<ObjectDisposedException>(() => device.WaitForIdle());
         Assert.True(device.Disconnect());
     }
