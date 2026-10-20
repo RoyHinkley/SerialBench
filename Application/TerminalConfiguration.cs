@@ -134,6 +134,25 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
         return true;
     }
 
+    /// <summary>Builds the reusable communications configuration represented by the current application settings.</summary>
+    public bool TryCreateChannelConfiguration(out SerialChannelConfiguration? channelConfiguration, out string? error)
+    {
+        channelConfiguration = null;
+        SerialPortSettings portSettings;
+        try { portSettings = CreatePortSettings(); }
+        catch (InvalidOperationException e) { error = e.Message; return false; }
+        if (!TryCreateProtocolSettings(out var protocolSettings, out error)) return false;
+        channelConfiguration = new SerialChannelConfiguration(portSettings)
+        {
+            RtsMode = RtsMode,
+            MillisecondsBetweenMessages = MillisecondsBetweenMessages,
+            MillisecondsBetweenBytes = MillisecondsBetweenBytes,
+            MaximumMillisecondsSilenceInMessage = MaximumMillisecondsSilenceInMessage,
+            ProtocolSettings = protocolSettings!
+        };
+        return true;
+    }
+
     private static string ParityAbbreviation(Parity value) => value switch { Parity.None => "N", Parity.Odd => "O", Parity.Even => "E", Parity.Mark => "M", Parity.Space => "S", _ => value.ToString() };
     private static string StopBitsAbbreviation(StopBits value) => value switch { StopBits.One => "1", StopBits.OnePointFive => "1.5", StopBits.Two => "2", _ => value.ToString() };
     private static bool TryHex16(string text, string name, out ushort value, out string? error) { if (ushort.TryParse(NormalizeHex(text), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value)) { error = null; return true; } error = $"Invalid {name}: '{text}'. Enter 1-4 hexadecimal digits."; return false; }
