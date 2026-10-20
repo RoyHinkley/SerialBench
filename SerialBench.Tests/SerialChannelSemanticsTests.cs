@@ -12,7 +12,7 @@ public sealed class SerialChannelSemanticsTests
         var transport = factory.Enqueue();
         using var channel = new SerialChannel(new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
         {
-            ProtocolSettings = SerialProtocolSettings.From(options, true),
+            ProtocolSettings = SerialProtocolSettings.Crc16(options, suppressInvalidMessages: true),
             MaximumMillisecondsSilenceInMessage = 5
         }, factory);
         var delivered = 0;
@@ -27,6 +27,48 @@ public sealed class SerialChannelSemanticsTests
         Assert.True(SpinWait.SpinUntil(() => channel.Telemetry.CheckFailures == 1, TimeSpan.FromSeconds(2)));
         Assert.Equal(1, channel.Telemetry.MessagesReceived);
         Assert.Equal(0, Volatile.Read(ref delivered));
+    }
+
+    [Fact]
+    public void Xor_check_is_applied_to_transmitted_message()
+    {
+        var factory = new FakeSerialTransportFactory();
+        factory.Enqueue();
+        using var channel = new SerialChannel(new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
+        {
+            ProtocolSettings = SerialProtocolSettings.Xor()
+        }, factory);
+        var traces = new List<string>();
+        var sync = new object();
+        channel.Trace += (message, _) => { lock (sync) traces.Add(message); };
+        Assert.True(channel.Connect());
+
+        Assert.True(channel.Command(new byte[] { 0x10, 0x20, 0x31 }));
+
+        Assert.True(SpinWait.SpinUntil(() => channel.Telemetry.MessagesTransmitted == 1, TimeSpan.FromSeconds(2)));
+        lock (sync) Assert.Contains(traces, entry => entry.Contains("Transmit: 10 20 31 01", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Invalid_xor_message_reports_generic_check_failure_and_can_be_suppressed()
+    {
+        var factory = new FakeSerialTransportFactory();
+        var transport = factory.Enqueue();
+        using var channel = new SerialChannel(new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
+        {
+            ProtocolSettings = SerialProtocolSettings.Xor(suppressInvalidMessages: true),
+            MaximumMillisecondsSilenceInMessage = 5
+        }, factory);
+        ReceivedData? delivered = null;
+        channel.DataReceived += data => delivered = data;
+        Assert.True(channel.Connect());
+
+        transport.EnqueueReceived(0x10, 0x20, 0x31, 0x02);
+        transport.RaiseDataReceived();
+
+        Assert.True(SpinWait.SpinUntil(() => channel.Telemetry.CheckFailures == 1, TimeSpan.FromSeconds(2)));
+        Assert.Equal(1, channel.Telemetry.MessagesReceived);
+        Assert.Null(delivered);
     }
 
     [Fact]
