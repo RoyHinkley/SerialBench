@@ -2,7 +2,7 @@ using SerialCommunications.Serial.Protocol;
 
 namespace SerialCommunications.Serial;
 
-/// <summary>Adapts generic decoded messages to the diagnostic evidence retained by the legacy SerialChannel API.</summary>
+/// <summary>Adapts decoded messages to the diagnostic evidence retained by <see cref="ReceivedData"/>.</summary>
 internal static class ReceivedDataAdapter
 {
     public static ReceivedData Create(DecodedMessage message, SerialProtocolSettings settings)
@@ -12,8 +12,11 @@ internal static class ReceivedDataAdapter
 
         var frame = message.Frame.ToArray();
         var payload = message.Payload.ToArray();
-        if (!settings.UseCrc)
-            return new ReceivedData(frame, payload, null);
+        if (settings.CheckKind == MessageCheckKind.None)
+            return new ReceivedData(frame, payload, null, false);
+
+        if (settings.CheckKind != MessageCheckKind.Crc16)
+            return new ReceivedData(frame, payload, message.CheckValid, false);
 
         ushort? receivedCrc = null;
         if (frame.Length >= 2)
@@ -31,6 +34,7 @@ internal static class ReceivedDataAdapter
             frame,
             payload,
             message.CheckValid,
+            true,
             receivedCrc,
             calculatedResidue,
             settings.ExpectedResidue);
