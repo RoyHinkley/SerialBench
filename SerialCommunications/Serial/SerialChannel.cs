@@ -194,7 +194,6 @@ public sealed class SerialChannel : IDisposable
         }
     }
 
-    public bool Reset() { ThrowIfDisposed(); ReportTrace("resetting..."); Disconnect(); return Connect(); }
     public void WaitForIdle() { ThrowIfDisposed(); while (!Idle) Thread.Sleep(5); }
 
     private void StartConnectionMaintenance()
@@ -341,24 +340,20 @@ public sealed class SerialChannel : IDisposable
         ReportTrace("starting Transmit thread.", TraceFlags.Detail);
         try
         {
-            byte[] tx = []; var offset = 0; var messageReported = false; txSw.Restart();
+            byte[] tx = []; var offset = 0; txSw.Restart();
             while (active)
             {
                 if (offset < tx.Length)
                 {
                     try
                     {
-                        if (!messageReported)
-                        {
-                            ReportTrace($"Transmit: {BinaryDataFormatter.ToHexBytes(tx)}");
-                            messageReported = true;
-                        }
                         if (MillisecondsBetweenBytes < 0)
                         {
                             if (MillisecondsSinceLastTx >= MillisecondsBetweenMessages)
                             {
                                 port!.Write(tx, 0, tx.Length); txSw.Restart(); offset = tx.Length;
                                 Telemetry.RecordMessageTransmitted();
+                                ReportTrace($"Transmit: {BinaryDataFormatter.ToHexBytes(tx)}");
                             }
                             else Thread.Sleep(1);
                         }
@@ -366,7 +361,11 @@ public sealed class SerialChannel : IDisposable
                         {
                             ReportTrace($"Transmit byte ({MillisecondsSinceLastTx:0} ms since last): {tx[offset]:X2}", TraceFlags.Detail);
                             port!.Write(tx, offset++, 1); txSw.Restart();
-                            if (offset == tx.Length) Telemetry.RecordMessageTransmitted();
+                            if (offset == tx.Length)
+                            {
+                                Telemetry.RecordMessageTransmitted();
+                                ReportTrace($"Transmit: {BinaryDataFormatter.ToHexBytes(tx)}");
+                            }
                         }
                         else Thread.Sleep(1);
                     }
@@ -377,7 +376,7 @@ public sealed class SerialChannel : IDisposable
                     transmitting = false;
                     if (commandQ.TryDequeue(out var command))
                     {
-                        offset = 0; tx = txCrc is null ? command : txCrc.Append(command); transmitting = true; messageReported = false;
+                        offset = 0; tx = txCrc is null ? command : txCrc.Append(command); transmitting = true;
                     }
                     else txSignal.WaitOne(1000);
                 }
@@ -399,6 +398,7 @@ public sealed class SerialChannel : IDisposable
     {
         if (!receivedSettings.TryDequeue(out var settings)) settings = protocolSettings;
         var data = ReceivedDataAdapter.Create(message, settings);
+        Telemetry.RecordMessageReceived();
         if (settings.UseCrc && !message.CheckValid)
         {
             Telemetry.RecordCheckFailure();
@@ -406,7 +406,6 @@ public sealed class SerialChannel : IDisposable
             if (settings.SuppressInvalidMessages) return;
         }
         ReportTrace($"Receive message: {BinaryDataFormatter.ToEscapedText(data.PayloadBytes.Span)}");
-        Telemetry.RecordMessageReceived();
         DispatchData(data);
     }
 
@@ -455,19 +454,22 @@ public sealed class SerialChannel : IDisposable
             lastSignalState = state;
             ReportTrace($"signals: {state}", TraceFlags.Detail | TraceFlags.Noisy);
             var handlers = SignalsChanged; if (handlers is null) return;
-            foreach (Action<SerialSignalState> handler in handlers.GetInvocationList()) try { handler(state); } catch (Exception e) { ReportError($"signal handler exception: {e}"); }
+            foreach (Action<SerialSignalState> handler in handlers.GetInvocationList())
+                try { handler(state); } catch (Exception e) { ReportTrace($"SignalsChanged subscriber exception: {e}", TraceFlags.Detail); }
         }
         catch (Exception e) { ReportError($"signal state exception: {e.Message}"); }
     }
     private void DispatchData(ReceivedData data)
     {
         var handlers = DataReceived; if (handlers is null) return;
-        foreach (Action<ReceivedData> handler in handlers.GetInvocationList()) try { handler(data); } catch (Exception e) { ReportError($"data handler exception: {e}"); }
+        foreach (Action<ReceivedData> handler in handlers.GetInvocationList())
+            try { handler(data); } catch (Exception e) { ReportTrace($"DataReceived subscriber exception: {e}", TraceFlags.Detail); }
     }
     private void Dispatch(EventHandler? handlers, string name)
     {
         if (handlers is null) return;
-        foreach (EventHandler handler in handlers.GetInvocationList()) try { handler(this, EventArgs.Empty); } catch (Exception e) { ReportError($"{name} handler exception: {e}"); }
+        foreach (EventHandler handler in handlers.GetInvocationList())
+            try { handler(this, EventArgs.Empty); } catch (Exception e) { ReportTrace($"{name} subscriber exception: {e}", TraceFlags.Detail); }
     }
     private void ReportTrace(string message, TraceFlags flags = TraceFlags.None)
     {
