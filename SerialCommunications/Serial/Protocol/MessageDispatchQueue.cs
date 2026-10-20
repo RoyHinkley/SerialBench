@@ -3,6 +3,10 @@ using System.Collections.Concurrent;
 namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Decouples deterministic message decoding from arbitrary consumer work.</summary>
+/// <remarks>
+/// Completed messages are queued without a fixed bound so a slow consumer cannot stall serial reception or cause
+/// silent message loss. Consumers that may block indefinitely should provide their own admission policy upstream.
+/// </remarks>
 public sealed class MessageDispatchQueue : IDisposable
 {
     private readonly object decoderLock = new();
@@ -62,13 +66,24 @@ public sealed class MessageDispatchQueue : IDisposable
         lock (decoderLock) decoder.SilenceElapsed(Enqueue);
     }
 
-    /// <summary>Stages a decoder for adoption immediately after the next decoded message boundary.</summary>
+    /// <summary>
+    /// Replaces the decoder immediately when no incomplete message is buffered; otherwise stages it for the next
+    /// decoded message boundary.
+    /// </summary>
     public void StageDecoder(IMessageDecoder replacement, Action? applied = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(replacement);
         lock (decoderLock)
         {
+            if (!decoder.HasPendingData)
+            {
+                decoder = replacement;
+                try { applied?.Invoke(); }
+                catch (Exception e) { ReportError(e); }
+                return;
+            }
+
             pendingDecoder = replacement;
             pendingDecoderApplied = applied;
         }
@@ -149,7 +164,10 @@ public sealed class MessageDispatchQueue : IDisposable
             active = false;
             while (queue.TryDequeue(out _)) { }
             if (worker.IsAlive)
-                signal.Set();
+            {
+                try { signal.Set(); }
+                catch (ObjectDisposedException) { }
+            }
         }
         // Deliberately do not join. A consumer is application code and may block indefinitely;
         // serial disconnect/disposal must never inherit that lifetime.

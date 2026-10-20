@@ -9,6 +9,9 @@ public sealed class TerminatorMessageFramer(byte terminator, bool includeTermina
 {
     private readonly List<byte> pending = [];
 
+    /// <inheritdoc />
+    public bool HasPendingData => pending.Count != 0;
+
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);

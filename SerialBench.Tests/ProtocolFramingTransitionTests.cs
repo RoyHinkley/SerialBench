@@ -5,7 +5,7 @@ namespace SerialBench.Tests;
 public sealed class ProtocolFramingTransitionTests
 {
     [Fact]
-    public void Omit_term_character_change_applies_after_current_message_without_reconnect()
+    public void Protocol_change_applies_immediately_when_receiver_is_idle()
     {
         var oldOptions = AeonOptions(omitTermChar: true);
         var newOptions = AeonOptions(omitTermChar: false);
@@ -28,24 +28,18 @@ public sealed class ProtocolFramingTransitionTests
         WaitForMessages(received, sync, 1);
 
         Assert.True(device.StageProtocolSettings(SerialProtocolSettings.From(newOptions, false)));
-
-        // The staged decoder is adopted at the next message boundary. Complete one old-style
-        // message, then verify that the following message uses explicit ETX framing.
-        var boundaryPayload = new byte[] { 0x44, 0x45, 0x46 };
-        transport.EnqueueReceived(new Crc(oldOptions).Append(boundaryPayload));
-        transport.RaiseDataReceived();
-        WaitForMessages(received, sync, 2);
         Assert.False(device.ProtocolSettings.OmitTermChar);
+        Assert.Null(device.PendingProtocolSettings);
 
         var newPayload = new byte[] { 0x51, 0x52, 0x53 };
         var newWire = new Crc(newOptions).Append(newPayload);
         Assert.Equal(newOptions.TermChar, newWire[^1]);
         transport.EnqueueReceived(newWire);
         transport.RaiseDataReceived();
-        var messages = WaitForMessages(received, sync, 3);
+        var messages = WaitForMessages(received, sync, 2);
 
-        Assert.Equal(newPayload, messages[2].PayloadBytes.ToArray());
-        Assert.True(messages[2].CrcValid);
+        Assert.Equal(newPayload, messages[1].PayloadBytes.ToArray());
+        Assert.True(messages[1].CrcValid);
     }
 
     [Fact]
@@ -77,6 +71,7 @@ public sealed class ProtocolFramingTransitionTests
         transport.RaiseDataReceived();
         WaitUntilDrained(transport);
         Assert.True(device.StageProtocolSettings(SerialProtocolSettings.From(newOptions, false)));
+        Assert.NotNull(device.PendingProtocolSettings);
 
         transport.EnqueueReceived(oldWire[2..].Concat(newWire).ToArray());
         transport.RaiseDataReceived();
@@ -87,6 +82,7 @@ public sealed class ProtocolFramingTransitionTests
         Assert.True(messages[1].CrcValid);
         Assert.Equal(newPayload, messages[1].PayloadBytes.ToArray());
         Assert.Equal(newOptions.Polynomial, device.ProtocolSettings.Polynomial);
+        Assert.Null(device.PendingProtocolSettings);
     }
 
     private static CrcOptions AeonOptions(bool omitTermChar) => new()

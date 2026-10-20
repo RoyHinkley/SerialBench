@@ -10,6 +10,9 @@ namespace SerialCommunications.Serial.Protocol;
 /// </remarks>
 public interface IMessageFramer
 {
+    /// <summary>Whether bytes belonging to an incomplete frame are currently buffered.</summary>
+    bool HasPendingData { get; }
+
     /// <summary>Consumes another contiguous portion of the received byte stream.</summary>
     void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady);
 

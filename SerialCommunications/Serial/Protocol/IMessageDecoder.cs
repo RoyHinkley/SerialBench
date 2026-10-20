@@ -1,8 +1,11 @@
 namespace SerialCommunications.Serial.Protocol;
 
-/// <summary>Incrementally converts received byte chunks into framed, integrity-checked messages.</summary>
+/// <summary>Incrementally converts received byte chunks into framed, checked messages.</summary>
 public interface IMessageDecoder
 {
+    /// <summary>Whether the framing strategy currently holds bytes from an incomplete message.</summary>
+    bool HasPendingData { get; }
+
     /// <summary>Consumes another transport-delivered chunk without assigning protocol meaning to the chunk boundary.</summary>
     void Consume(ReadOnlySpan<byte> bytes, Action<DecodedMessage> messageReady);
 

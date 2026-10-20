@@ -7,6 +7,9 @@ public sealed class MessageDecoder(IMessageFramer framer, IMessageCheck check) :
     private readonly IMessageCheck check = check ?? throw new ArgumentNullException(nameof(check));
 
     /// <inheritdoc />
+    public bool HasPendingData => framer.HasPendingData;
+
+    /// <inheritdoc />
     public void Consume(ReadOnlySpan<byte> bytes, Action<DecodedMessage> messageReady)
     {
         ArgumentNullException.ThrowIfNull(messageReady);

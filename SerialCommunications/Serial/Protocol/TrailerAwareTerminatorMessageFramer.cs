@@ -30,6 +30,9 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     }
 
     /// <inheritdoc />
+    public bool HasPendingData => buffer.Count != 0;
+
+    /// <inheritdoc />
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
