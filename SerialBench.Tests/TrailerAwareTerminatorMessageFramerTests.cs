@@ -88,7 +88,7 @@ public sealed class TrailerAwareTerminatorMessageFramerTests
 
         var frame = Assert.Single(frames);
         Assert.Equal(wire[..^1], frame);
-        Assert.False(new Crc16MessageIntegrity(options).TryValidate(frame, out _));
+        Assert.False(new Crc16MessageCheck(options).TryValidate(frame, out _));
     }
 
     [Fact]
@@ -105,8 +105,8 @@ public sealed class TrailerAwareTerminatorMessageFramerTests
 
         Assert.Equal(3, frames.Count);
         Assert.Equal(new byte[] { 0x10 }, frames[0]);
-        Assert.False(new Crc16MessageIntegrity(options).TryValidate(frames[0], out _));
-        Assert.False(new Crc16MessageIntegrity(options).TryValidate(frames[1], out _));
+        Assert.False(new Crc16MessageCheck(options).TryValidate(frames[0], out _));
+        Assert.False(new Crc16MessageCheck(options).TryValidate(frames[1], out _));
         Assert.Equal(valid[..^1], frames[2]);
     }
 
@@ -125,8 +125,8 @@ public sealed class TrailerAwareTerminatorMessageFramerTests
         Assert.Equal(2, frames.Count);
         Assert.Equal(corrupt[..^1], frames[0]);
         Assert.Equal(valid[..^1], frames[1]);
-        Assert.False(new Crc16MessageIntegrity(options).TryValidate(frames[0], out _));
-        Assert.True(new Crc16MessageIntegrity(options).TryValidate(frames[1], out _));
+        Assert.False(new Crc16MessageCheck(options).TryValidate(frames[0], out _));
+        Assert.True(new Crc16MessageCheck(options).TryValidate(frames[1], out _));
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class TrailerAwareTerminatorMessageFramerTests
     }
 
     private static TrailerAwareTerminatorMessageFramer CreateFramer(CrcOptions options) =>
-        new(options.TermChar, new Crc16MessageIntegrity(options));
+        new(options.TermChar, new Crc16MessageCheck(options));
 
     private static byte[] FindPayload(CrcOptions options, Func<byte[], bool> predicate)
     {
