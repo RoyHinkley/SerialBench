@@ -6,35 +6,30 @@
 
 SerialBench is an interactive serial communications investigation/diagnostic application. `SerialCommunications` is becoming a reusable serial-device communications library intended for both SerialBench and automated consumers such as AeonHacs.
 
-The lower-level transport/lifecycle/recovery architecture is substantially settled and tested. Current finishing work is removing legacy terminology/API remnants, completing message-check support and reusable configuration, documenting the public library API, and then reviewing the remaining cross-layer questions before considering a repository split.
+The lower-level transport/lifecycle/recovery architecture and the principal app/library boundary are substantially settled. Current finishing work is completing generic message-check configuration, public API documentation/tests, and the final open-item classification before repository extraction.
 
 Core boundary: the library supplies faithful communications mechanisms, state, diagnostics, telemetry, and reusable conversion/checking tools. SerialBench owns human presentation, persistence/profiles, logging policy, and interactive behavior. Instrument consumers own command/response meaning.
 
 Keep connection intent, transport availability, and communications health independent.
 
+## Settled pre-split boundary decisions
+
+- Live protocol changes apply immediately when the receive decoder has no incomplete message. If bytes are already buffered, the old decoder completes that message and the staged decoder takes over exactly at its boundary, including when following bytes occur in the same transport chunk.
+- `SerialChannelTelemetry.MessagesReceived` counts decoded/framed messages, including invalid messages suppressed from consumer delivery. `CheckFailures` records the independent failed-check fact. Recovery-period attempt state remains distinct from lifetime telemetry.
+- A normal logical `Transmit` trace is emitted only after the complete message has been written successfully. Failed writes are errors but are neither counted nor narrated as completed transmissions.
+- Exceptions thrown by `SerialChannel` event subscribers are consumer faults, not communications errors; they are isolated and reported only as detailed diagnostics.
+- `TraceFlags.Detail` and `TraceFlags.Noisy` are independent inclusion categories in SerialBench. A trace carrying both is shown when either corresponding option is enabled; this lets `LogSignals` show signal diagnostics without requiring all detailed transport logging.
+- Consumer dispatch remains asynchronous and deliberately unbounded. The library must not stall serial reception or silently discard decoded messages because application code is slow. Consumers with a genuine bounded-admission requirement should impose that policy above the faithful communications layer. Disposal remains non-blocking with respect to arbitrary consumer code.
+- The obsolete generic `SerialChannel.Reset()` API is removed. A consumer that deliberately wants to cycle a transport can express that policy explicitly with `Disconnect()` / `Connect()`; communications-health failures do not implicitly mean transport loss.
+- Survey of AeonHacs consumers confirms that request/response orchestration belongs above `SerialCommunications`. Existing consumers vary in polling, command queues, expected-response counts, retry/timeout policy, response validation, ACK/NAK interpretation, addressing/shared-device management, and protocol-specific bypass/check representation. Do not add a generic conversation/protocol DSL to the library now. A future reusable conversation helper should be justified by concrete common behavior after AeonHacs migration, not anticipated in advance.
+- Configuration ownership is split by role: `SerialChannelConfiguration` / `SerialProtocolSettings` are reusable library snapshots; SerialBench owns live editing, persistence, profiles, and UI defaults.
+
 ## Immediate work
 
-- Finish replacing `Integrity` terminology with `Check`; remove transitional compatibility types/properties rather than carrying them forward.
 - Complete generic message-check support. CRC is configurable; XOR defaults to zero-seeded byte XOR (the mechanism behind the surveyed Eurotherm BCC); Checksum defaults to the low eight bits of the additive byte sum. Protocol-specific field names, byte selection, bypass rules, and textual representations remain above the generic calculation.
-- Finish the `SerialChannelConfiguration` / `SerialProtocolSettings` migration and remove redundant legacy CRC mirrors (`CrcConfig`, `IgnoreCRCErrors`) once callers are migrated.
-- Remove obsolete `SerialDataFormatter` after all callers use byte-oriented `BinaryDataFormatter`.
-- Remove obsolete generic `SerialChannel.Reset()` if no real consumer remains.
 - Complete concise XML documentation for every public `SerialCommunications` type/member, including every enum value. Document non-obvious semantics, units, defaults, special values, lifetime/threading behavior, and exact check algorithms; avoid tautological boilerplate. Enable CS1591 enforcement after the backlog is clean.
-- Add/adjust deterministic tests for configuration application, telemetry semantics, diagnostics, transmission accounting/failure, and message checks.
-
-## Cross-layer questions to resolve before repository split
-
-Review every remaining item and classify it as SerialCommunications, SerialBench, or genuinely cross-layer. Resolve the cross-layer items while both projects are still easy to refactor together.
-
-- **Conversation layer:** survey materially distinct AeonHacs serial consumers before deciding how much reusable request/response behavior belongs above decoded messages: echo, ACK/NAK, unsolicited/multiple responses, addressing/shared buses, prompts, turnaround timing, timeouts/retries, polling, and sequence IDs. Prefer a simple consumer-facing abstraction over a protocol DSL.
-- **Live protocol changes:** verify staging semantics when settings change while idle and remove any obsolete reconnect-required application path.
-- **Configuration boundary:** SerialCommunications must expose complete reusable channel/protocol configuration without depending on SerialBench; SerialBench owns live editing, persistence, profiles, and UI defaults. Preserve practical profile/file compatibility where worthwhile.
-- **Diagnostics boundary:** preserve useful chronological evidence without duplicate narration. Revisit whether subscriber exceptions should be reported as SerialChannel communications errors and verify `Detail | Noisy` filtering semantics in SerialBench.
-- **Telemetry semantics:** decide explicitly whether `MessagesReceived` means decoded/framed messages or messages actually delivered after invalid-message suppression. Keep current recovery-period attempt state distinct from lifetime telemetry.
-- **Transmit diagnostics:** decide whether the normal logical `Transmit` trace should occur only after successful complete transmission rather than before the first write.
-- **Dispatch/backpressure:** decide whether an unbounded consumer dispatch queue is acceptable for realistic blocked-consumer cases.
-
-Do not split repositories until these boundaries leave two independently coherent project objectives. Then extract SerialCommunications and its tests, establish the application dependency, and give each repository its own consumer-facing README and remaining-work list.
+- Finish deterministic coverage for reusable configuration, telemetry reset/lifetime behavior, diagnostics, transmission accounting/failure, and all message-check variants.
+- Review every remaining item below and classify it as SerialCommunications or SerialBench. Do not split until each repository has an independently coherent objective and remaining-work list.
 
 ## SerialBench deferred work
 
@@ -49,11 +44,10 @@ Do not split repositories until these boundaries leave two independently coheren
 - Validate self-contained Windows deployment on a clean machine and writable settings/log locations.
 - Replace obsolete Avalonia `TextBox.Watermark` with `PlaceholderText`.
 
-## Library/transport deferred work
+## SerialCommunications deferred work
 
 - Verify RTS Toggle behavior with current .NET/Windows and representative adapters only when a target setup requires it; do not restore reflection into private `SerialPort` internals.
 - Add genuinely unframed streaming only for a demonstrated use case.
-- Revisit `MessageDispatchQueue.Dispose()` signal/disposal race if concurrency review warrants it.
 - Clean stale `SerialDevice` filenames/names after functional API cleanup.
 
 ## Development rules
