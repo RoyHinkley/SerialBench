@@ -15,10 +15,15 @@ public sealed class SilenceFramedReceiveTests
         OmitTermChar = true
     };
 
+    private static SerialChannel CrcChannel(CrcOptions options) => new(new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
+    {
+        ProtocolSettings = SerialProtocolSettings.From(options, false)
+    });
+
     [Fact]
     public void Valid_crc_response_preserves_wire_payload_and_crc_evidence()
     {
-        using var device = new SerialChannel("TEST") { CrcConfig = FieldCrc() };
+        using var device = CrcChannel(FieldCrc());
         var payload = new byte[] { 0x02, 0x03, 0x10, 0x03, 0x20 };
         var wire = new Crc(FieldCrc()).Append(payload);
 
@@ -35,7 +40,7 @@ public sealed class SilenceFramedReceiveTests
     [Fact]
     public void Corrupt_crc_is_reported_without_losing_received_bytes()
     {
-        using var device = new SerialChannel("TEST") { CrcConfig = FieldCrc() };
+        using var device = CrcChannel(FieldCrc());
         var payload = new byte[] { 0x02, 0x03, 0x10, 0x20 };
         var wire = new Crc(FieldCrc()).Append(payload);
         wire[^1] ^= 0x01;
@@ -70,7 +75,7 @@ public sealed class SilenceFramedReceiveTests
         var payload = new byte[] { 0x02, 0x03, 0x11, 0x03, 0x22, 0x33 };
         var response = new Crc(crcOptions).Append(payload);
         var instrument = new VirtualInstrument().RespondTo(command, response);
-        using var device = new SerialChannel("TEST") { CrcConfig = crcOptions };
+        using var device = CrcChannel(crcOptions);
 
         var received = device.DecodeSilenceFramedMessage(instrument.Respond(command));
 
@@ -84,7 +89,7 @@ public sealed class SilenceFramedReceiveTests
         var options = FieldCrc();
         var payload = new byte[] { 0x02, 0x03, 0x11, 0x22, 0x03, 0x44 };
         var wire = new Crc(options).Append(payload);
-        using var device = new SerialChannel("TEST") { CrcConfig = options };
+        using var device = CrcChannel(options);
 
         for (var split = 1; split < wire.Length; split++)
         {
@@ -108,7 +113,7 @@ public sealed class SilenceFramedReceiveTests
         var instrument = new VirtualInstrument()
             .RespondTo(command1, new Crc(options).Append(payload1))
             .RespondTo(command2, new Crc(options).Append(payload2));
-        using var device = new SerialChannel("TEST") { CrcConfig = options };
+        using var device = CrcChannel(options);
 
         var first = device.DecodeSilenceFramedMessage(instrument.Respond(command1));
         var second = device.DecodeSilenceFramedMessage(instrument.Respond(command2));
@@ -128,7 +133,7 @@ public sealed class SilenceFramedReceiveTests
         var badWire = new Crc(options).Append(badPayload);
         badWire[^1] ^= 0x80;
         var goodWire = new Crc(options).Append(goodPayload);
-        using var device = new SerialChannel("TEST") { CrcConfig = options };
+        using var device = CrcChannel(options);
 
         var bad = device.DecodeSilenceFramedMessage(badWire);
         var good = device.DecodeSilenceFramedMessage(goodWire);
@@ -144,7 +149,7 @@ public sealed class SilenceFramedReceiveTests
         var options = FieldCrc();
         var payload = FindPayloadWhoseCrcContains(0x03, options);
         var wire = new Crc(options).Append(payload);
-        using var device = new SerialChannel("TEST") { CrcConfig = options };
+        using var device = CrcChannel(options);
 
         var received = device.DecodeSilenceFramedMessage(wire);
 
