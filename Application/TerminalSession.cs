@@ -46,7 +46,6 @@ public sealed class TerminalSession : IDisposable
     public TerminalSession(SerialChannel serialChannel, DiagnosticLog? log = null) { this.log = log; SerialChannel = serialChannel; }
     public bool Connect() => SerialChannel?.Connect() == true;
     public bool Disconnect() => SerialChannel?.Disconnect() ?? true;
-    public bool Reset() => SerialChannel?.Reset() == true;
     public void WaitForIdle() => SerialChannel?.WaitForIdle();
 
     /// <summary>Sends exact payload bytes; text/escape interpretation is deliberately outside this layer.</summary>
@@ -90,9 +89,10 @@ public sealed class TerminalSession : IDisposable
 
     private void SerialChannelTrace(string message, TraceFlags flags)
     {
-        if ((flags & TraceFlags.Detail) != 0 && !LogEverything) return;
-        if ((flags & TraceFlags.Noisy) != 0 && !LogNoisy) return;
-        Log?.Record(message);
+        if (flags == TraceFlags.None ||
+            ((flags & TraceFlags.Detail) != 0 && LogEverything) ||
+            ((flags & TraceFlags.Noisy) != 0 && LogNoisy))
+            Log?.Record(message);
     }
 
     private void SerialChannelError(string message) => Log?.Record(message);
