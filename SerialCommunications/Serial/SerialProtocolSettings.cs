@@ -34,6 +34,9 @@ public sealed record SerialProtocolSettings(
     bool OmitTermChar,
     bool SuppressInvalidMessages)
 {
+    /// <summary>Whether this snapshot uses the CRC-16 check calculation.</summary>
+    public bool UseCrc => CheckKind == MessageCheckKind.Crc16;
+
     /// <summary>Creates settings with no message check field.</summary>
     public static SerialProtocolSettings None(bool suppressInvalidMessages = false) =>
         new(MessageCheckKind.None, 0, 0, 0, false, false, false, 0, true, suppressInvalidMessages);
@@ -72,7 +75,7 @@ public sealed record SerialProtocolSettings(
         crc is null ? None(suppressInvalidMessages) : Crc16(crc, suppressInvalidMessages);
 
     /// <summary>Creates a fresh mutable CRC options object when this snapshot uses CRC-16.</summary>
-    public CrcOptions? CreateCrcOptions() => CheckKind != MessageCheckKind.Crc16 ? null : new CrcOptions(
+    public CrcOptions? CreateCrcOptions() => !UseCrc ? null : new CrcOptions(
         InitialValue, Polynomial, ExpectedResidue, PostInvert, MsBitFirst, MsByteFirst, TermChar, OmitTermChar);
 
     /// <summary>Creates the configured message-check calculation.</summary>
