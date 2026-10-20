@@ -56,7 +56,7 @@ public sealed class SerialChannel : IDisposable
     private SerialMessagePipeline? receivePipeline;
     private volatile bool active;
     private bool disposed;
-    private Crc? txCrc;
+    private IMessageCheck txCheck = NoMessageCheck.Instance;
     private ConcurrentQueue<byte[]> commandQ = new();
     private volatile bool transmitting;
     private Thread? txThread;
@@ -66,7 +66,7 @@ public sealed class SerialChannel : IDisposable
     private readonly AutoResetEvent recoverySignal = new(false);
     private readonly Stopwatch txSw = new(), rxSw = new(), recoverySw = new();
     private SerialSignalState? lastSignalState;
-    private SerialProtocolSettings protocolSettings = SerialProtocolSettings.From(null, false);
+    private SerialProtocolSettings protocolSettings = SerialProtocolSettings.None();
     private SerialProtocolSettings? pendingProtocolSettings;
     private string? recoveryFailureSignature;
     private int repeatedRecoveryFailures;
@@ -294,8 +294,7 @@ public sealed class SerialChannel : IDisposable
     {
         commandQ = new();
         transmitting = false;
-        var crc = protocolSettings.CreateCrcOptions();
-        txCrc = crc is null ? null : new Crc(crc);
+        txCheck = protocolSettings.CreateMessageCheck();
         lastSignalState = null;
         txSw.Reset(); rxSw.Reset(); Drain(txSignal);
         while (receivedSettings.TryDequeue(out _)) { }
@@ -376,7 +375,7 @@ public sealed class SerialChannel : IDisposable
                     transmitting = false;
                     if (commandQ.TryDequeue(out var command))
                     {
-                        offset = 0; tx = txCrc is null ? command : txCrc.Append(command); transmitting = true;
+                        offset = 0; tx = txCheck.Append(command); transmitting = true;
                     }
                     else txSignal.WaitOne(1000);
                 }
@@ -399,7 +398,7 @@ public sealed class SerialChannel : IDisposable
         if (!receivedSettings.TryDequeue(out var settings)) settings = protocolSettings;
         var data = ReceivedDataAdapter.Create(message, settings);
         Telemetry.RecordMessageReceived();
-        if (settings.UseCrc && !message.CheckValid)
+        if (settings.CheckKind != MessageCheckKind.None && !message.CheckValid)
         {
             Telemetry.RecordCheckFailure();
             ReportError($"Receive check failed: {BinaryDataFormatter.ToEscapedText(data.WireBytes.Span)}");
@@ -421,14 +420,13 @@ public sealed class SerialChannel : IDisposable
     private void ApplyProtocolSettings(SerialProtocolSettings settings)
     {
         protocolSettings = settings;
-        var crc = settings.CreateCrcOptions(); txCrc = crc is null ? null : new Crc(crc);
+        txCheck = settings.CreateMessageCheck();
     }
 
     internal ReceivedData DecodeSilenceFramedMessage(ReadOnlySpan<byte> wireBytes)
     {
         var settings = protocolSettings;
-        IMessageCheck check = settings.UseCrc ? new Crc16MessageCheck(settings.CreateCrcOptions()!) : NoMessageCheck.Instance;
-        var decoder = new MessageDecoder(new SilenceMessageFramer(), check);
+        var decoder = new MessageDecoder(new SilenceMessageFramer(), settings.CreateMessageCheck());
         DecodedMessage? decoded = null;
         decoder.Consume(wireBytes, m => decoded = m); decoder.SilenceElapsed(m => decoded = m);
         return ReceivedDataAdapter.Create(decoded ?? throw new InvalidOperationException("Silence decoder produced no message."), settings);
