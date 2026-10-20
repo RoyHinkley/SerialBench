@@ -147,7 +147,11 @@ public sealed class TermCharacterReceiveTests
         public ReceiveHarness(CrcOptions options)
         {
             var factory = new FakeSerialTransportFactory(); transport = factory.Enqueue();
-            device = new SerialChannel(new SerialPortSettings("TEST", 115200), factory) { CrcConfig = options };
+            var configuration = new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
+            {
+                ProtocolSettings = SerialProtocolSettings.From(options, false)
+            };
+            device = new SerialChannel(configuration, factory);
             device.DataReceived += OnDataReceived; Assert.True(device.Connect());
         }
 
