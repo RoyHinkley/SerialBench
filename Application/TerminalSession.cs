@@ -40,7 +40,9 @@ public sealed class TerminalSession : IDisposable
     public uint ResponseCount { get; private set; }
     public byte[] LastCommand { get; private set; } = [];
     public ReceivedData? LastReceivedData { get; private set; }
-    public string LastResponse => LastReceivedData?.PayloadText ?? string.Empty;
+    public string LastResponse => LastReceivedData is null
+        ? string.Empty
+        : BinaryDataFormatter.ToEscapedText(LastReceivedData.PayloadBytes.Span);
 
     public TerminalSession() { }
     public TerminalSession(SerialChannel serialChannel, DiagnosticLog? log = null) { this.log = log; SerialChannel = serialChannel; }
