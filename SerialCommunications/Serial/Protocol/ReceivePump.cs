@@ -7,10 +7,9 @@ namespace SerialCommunications.Serial.Protocol;
 /// <see cref="SignalDataAvailable"/> is deliberately limited to signaling the worker. It never reads, decodes,
 /// logs, or invokes application code. The acquisition callback should drain whatever bytes are currently
 /// available and feed them to the decoder in blocks. Repeated notifications naturally coalesce while the worker
-/// is busy. Silence is a separate observation measured from the most recent notification; consumers may use it
-/// for silence framing or ignore it entirely.
+/// is busy. Silence is a separate observation measured from the most recent notification.
 /// </remarks>
-public sealed class ReceivePump : IDisposable
+internal sealed class ReceivePump : IDisposable
 {
     private readonly Action acquireAvailable;
     private readonly Action silenceElapsed;
@@ -38,7 +37,6 @@ public sealed class ReceivePump : IDisposable
         worker.Start();
     }
 
-    /// <summary>Signals that the transport reports receive data. This method performs no receive work.</summary>
     public void SignalDataAvailable()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -92,10 +90,7 @@ public sealed class ReceivePump : IDisposable
     {
         if (acquisitionError is null) return;
         try { acquisitionError(exception); }
-        catch
-        {
-            // Error reporting is observational. It must not terminate receive acquisition.
-        }
+        catch { }
     }
 
     public void Dispose()
