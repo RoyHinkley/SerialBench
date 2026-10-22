@@ -1,7 +1,7 @@
 namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Incrementally converts received byte chunks into framed, checked messages.</summary>
-public interface IMessageDecoder
+internal interface IMessageDecoder
 {
     /// <summary>Whether the framing strategy currently holds bytes from an incomplete message.</summary>
     bool HasPendingData { get; }
