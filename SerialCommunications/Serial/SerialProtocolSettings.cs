@@ -9,9 +9,9 @@ public enum MessageCheckKind
     None,
     /// <summary>A configurable 16-bit cyclic redundancy check is appended and validated.</summary>
     Crc16,
-    /// <summary>A one-byte exclusive-OR check is appended and validated.</summary>
+    /// <summary>A zero-seeded one-byte exclusive-OR check is appended and validated.</summary>
     Xor,
-    /// <summary>A one-byte additive checksum is appended and validated.</summary>
+    /// <summary>The low eight bits of the zero-seeded additive byte sum are appended and validated.</summary>
     Checksum
 }
 
@@ -21,6 +21,7 @@ public enum MessageCheckKind
 /// transmit or receive operation is already using. A new snapshot can therefore be staged and adopted only
 /// at a known message boundary. Check calculations operate on the supplied binary payload; protocol-specific
 /// byte selection, bypass rules, field names, and textual representations belong above this layer.
+/// CRC-specific fields are meaningful only when <see cref="CheckKind"/> is <see cref="MessageCheckKind.Crc16"/>.
 /// </remarks>
 public sealed record SerialProtocolSettings(
     MessageCheckKind CheckKind,
@@ -47,52 +48,47 @@ public sealed record SerialProtocolSettings(
             suppressInvalidMessages);
     }
 
-    /// <summary>Creates settings for a one-byte XOR check.</summary>
-    /// <param name="initialValue">Initial XOR accumulator; zero is the conventional default.</param>
+    /// <summary>Creates settings for a zero-seeded one-byte XOR check.</summary>
     /// <param name="termChar">Message terminator used when <paramref name="omitTermChar"/> is false.</param>
     /// <param name="omitTermChar">When true, receive framing is determined by silence rather than a terminator.</param>
     /// <param name="suppressInvalidMessages">When true, failed-check messages are diagnosed but not delivered.</param>
-    public static SerialProtocolSettings Xor(byte initialValue = 0, byte termChar = 0x03,
+    public static SerialProtocolSettings Xor(byte termChar = 0x03,
         bool omitTermChar = true, bool suppressInvalidMessages = false) =>
-        new(MessageCheckKind.Xor, initialValue, 0, 0, false, false, false, termChar, omitTermChar,
+        new(MessageCheckKind.Xor, 0, 0, 0, false, false, false, termChar, omitTermChar,
             suppressInvalidMessages);
 
-    /// <summary>Creates settings for a one-byte additive checksum.</summary>
-    /// <param name="initialValue">Initial additive accumulator; zero is the conventional default.</param>
+    /// <summary>Creates settings for a zero-seeded one-byte additive checksum.</summary>
     /// <param name="termChar">Message terminator used when <paramref name="omitTermChar"/> is false.</param>
     /// <param name="omitTermChar">When true, receive framing is determined by silence rather than a terminator.</param>
     /// <param name="suppressInvalidMessages">When true, failed-check messages are diagnosed but not delivered.</param>
-    public static SerialProtocolSettings Checksum(byte initialValue = 0, byte termChar = 0x03,
+    public static SerialProtocolSettings Checksum(byte termChar = 0x03,
         bool omitTermChar = true, bool suppressInvalidMessages = false) =>
-        new(MessageCheckKind.Checksum, initialValue, 0, 0, false, false, false, termChar, omitTermChar,
+        new(MessageCheckKind.Checksum, 0, 0, 0, false, false, false, termChar, omitTermChar,
             suppressInvalidMessages);
 
     /// <summary>Creates a protocol snapshot from CRC options and invalid-message delivery policy.</summary>
     public static SerialProtocolSettings From(CrcOptions? crc, bool suppressInvalidMessages) =>
         crc is null ? None(suppressInvalidMessages) : Crc16(crc, suppressInvalidMessages);
 
-    /// <summary>Creates a fresh mutable CRC options object when this snapshot uses CRC-16.</summary>
-    public CrcOptions? CreateCrcOptions() => CheckKind != MessageCheckKind.Crc16 ? null : new CrcOptions(
+    internal CrcOptions? CreateCrcOptions() => CheckKind != MessageCheckKind.Crc16 ? null : new CrcOptions(
         InitialValue, Polynomial, ExpectedResidue, PostInvert, MsBitFirst, MsByteFirst, TermChar, OmitTermChar);
 
-    /// <summary>Creates the configured message-check calculation.</summary>
+    /// <summary>Creates the configured reusable message-check calculation.</summary>
     public IMessageCheck CreateMessageCheck() => CheckKind switch
     {
         MessageCheckKind.None => NoMessageCheck.Instance,
         MessageCheckKind.Crc16 => new Crc16MessageCheck(CreateCrcOptions()!),
-        MessageCheckKind.Xor => new XorMessageCheck((byte)InitialValue),
-        MessageCheckKind.Checksum => new ChecksumMessageCheck((byte)InitialValue),
+        MessageCheckKind.Xor => new XorMessageCheck(),
+        MessageCheckKind.Checksum => new ChecksumMessageCheck(),
         _ => throw new InvalidOperationException($"Unsupported message check kind: {CheckKind}.")
     };
 
-    /// <summary>Returns whether two snapshots use the same receive framing strategy.</summary>
-    public bool UsesSameFramingStrategyAs(SerialProtocolSettings other)
+    internal bool UsesSameFramingStrategyAs(SerialProtocolSettings other)
     {
         ArgumentNullException.ThrowIfNull(other);
         return CheckKind == other.CheckKind && OmitTermChar == other.OmitTermChar;
     }
 
-    /// <summary>Creates the receive decoder represented by this settings snapshot.</summary>
     internal IMessageDecoder CreateMessageDecoder()
     {
         var check = CreateMessageCheck();
