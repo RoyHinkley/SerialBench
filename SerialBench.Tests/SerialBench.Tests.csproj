@@ -23,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\SerialCommunications\SerialCommunications.csproj" />
     <ProjectReference Include="..\SerialBench.csproj" />
-    <ProjectReference Include="..\SerialCommunications\SerialCommunications.csproj" />
   </ItemGroup>
 </Project>
