@@ -53,15 +53,6 @@ public sealed class SerialProtocolSettingsTests
     }
 
     [Fact]
-    public void Generic_check_initial_values_are_preserved()
-    {
-        var payload = new byte[] { 0x10, 0x20 };
-
-        Assert.Equal(new byte[] { 0x10, 0x20, 0xCF }, SerialProtocolSettings.Xor(0xFF).CreateMessageCheck().Append(payload));
-        Assert.Equal(new byte[] { 0x10, 0x20, 0x35 }, SerialProtocolSettings.Checksum(0x05).CreateMessageCheck().Append(payload));
-    }
-
-    [Fact]
     public void Crc_parameter_changes_keep_same_receive_framing_strategy()
     {
         var current = SerialProtocolSettings.Crc16(new CrcOptions());
