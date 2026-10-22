@@ -126,7 +126,8 @@ public sealed class SerialChannelSemanticsTests
         Assert.Equal(0, channel.Telemetry.ReceiveNotifications);
         Assert.Equal(0, channel.Telemetry.RecoveryAttempts);
         Assert.Equal(0, channel.Telemetry.SuccessfulRecoveries);
-        Assert.True(channel.IsConnected);
+        Assert.Equal(SerialConnectionState.Connected, channel.ConnectionState);
+        Assert.True(channel.Ready);
 
         Assert.True(channel.Command(new byte[] { 0x43 }));
         Assert.True(SpinWait.SpinUntil(() => channel.Telemetry.MessagesTransmitted == 1, TimeSpan.FromSeconds(2)));
