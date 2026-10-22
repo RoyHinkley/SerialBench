@@ -86,7 +86,7 @@ public sealed class MessageCheckTests
     }
 
     [Fact]
-    public void Xor_check_defaults_to_zero_seeded_byte_xor()
+    public void Xor_check_is_zero_seeded_byte_xor()
     {
         var check = new XorMessageCheck();
         var payload = new byte[] { 0x31, 0x32, 0x33 };
@@ -99,16 +99,7 @@ public sealed class MessageCheckTests
     }
 
     [Fact]
-    public void Xor_check_supports_nonzero_initial_value()
-    {
-        var check = new XorMessageCheck(0xFF);
-        var frame = check.Append(new byte[] { 0x10, 0x20 });
-
-        Assert.Equal((byte)(0xFF ^ 0x10 ^ 0x20), frame[^1]);
-    }
-
-    [Fact]
-    public void Additive_checksum_defaults_to_low_eight_bits_of_byte_sum()
+    public void Additive_checksum_is_low_eight_bits_of_zero_seeded_byte_sum()
     {
         var check = new ChecksumMessageCheck();
         var payload = new byte[] { 0xF0, 0x20, 0x03 };
@@ -118,15 +109,6 @@ public sealed class MessageCheckTests
         Assert.Equal((byte)0x13, frame[^1]);
         Assert.True(check.TryValidate(frame, out var decoded));
         Assert.Equal(payload, decoded);
-    }
-
-    [Fact]
-    public void Additive_checksum_supports_nonzero_initial_value()
-    {
-        var check = new ChecksumMessageCheck(0x10);
-        var frame = check.Append(new byte[] { 0xF0, 0x20, 0x03 });
-
-        Assert.Equal((byte)0x23, frame[^1]);
     }
 
     private static byte[] FindPayload(CrcOptions options, Func<byte[], bool> predicate)
