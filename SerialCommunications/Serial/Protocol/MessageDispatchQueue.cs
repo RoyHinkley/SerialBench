@@ -7,7 +7,7 @@ namespace SerialCommunications.Serial.Protocol;
 /// Completed messages are queued without a fixed bound so a slow consumer cannot stall serial reception or cause
 /// silent message loss. Consumers that may block indefinitely should provide their own admission policy upstream.
 /// </remarks>
-public sealed class MessageDispatchQueue : IDisposable
+internal sealed class MessageDispatchQueue : IDisposable
 {
     private readonly object decoderLock = new();
     private IMessageDecoder decoder;
@@ -47,10 +47,6 @@ public sealed class MessageDispatchQueue : IDisposable
                 return;
             }
 
-            // A staged decoder must take effect at the first message boundary even when the
-            // transport supplied bytes beyond that boundary in the same acquisition chunk.
-            // Feed only until that boundary while a replacement is pending, then let the new
-            // decoder consume the remainder as one block.
             var offset = 0;
             while (offset < bytes.Length && pendingDecoder is not null)
                 decoder.Consume(bytes.Slice(offset++, 1), Enqueue);
@@ -97,7 +93,7 @@ public sealed class MessageDispatchQueue : IDisposable
             decoder.Reset();
             ApplyPendingDecoder();
         }
-        while (queue.TryDequeue(out _)) { }
+        while (queue.TryDequeue(out _) { }
     }
 
     private void Enqueue(DecodedMessage message)
@@ -106,9 +102,6 @@ public sealed class MessageDispatchQueue : IDisposable
         try { decoded?.Invoke(message); }
         catch (Exception e) { ReportError(e); }
 
-        // The decoder callback is the exact message boundary. Adopt staged protocol state here,
-        // before the message is made visible to the asynchronous consumer, so callers observing
-        // ProtocolSettings after receipt see the settings for the next message.
         ApplyPendingDecoder();
 
         queue.Enqueue(message);
@@ -144,7 +137,7 @@ public sealed class MessageDispatchQueue : IDisposable
         }
         finally
         {
-            while (queue.TryDequeue(out _)) { }
+            while (queue.TryDequeue(out _) { }
             signal.Dispose();
         }
     }
@@ -152,7 +145,7 @@ public sealed class MessageDispatchQueue : IDisposable
     private void ReportError(Exception exception)
     {
         try { consumerError?.Invoke(exception); }
-        catch { /* Error reporting must not terminate receive decoding or dispatch. */ }
+        catch { }
     }
 
     public void Dispose()
@@ -162,15 +155,13 @@ public sealed class MessageDispatchQueue : IDisposable
             if (disposed) return;
             disposed = true;
             active = false;
-            while (queue.TryDequeue(out _)) { }
+            while (queue.TryDequeue(out _) { }
             if (worker.IsAlive)
             {
                 try { signal.Set(); }
                 catch (ObjectDisposedException) { }
             }
         }
-        // Deliberately do not join. A consumer is application code and may block indefinitely;
-        // serial disconnect/disposal must never inherit that lifetime.
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
