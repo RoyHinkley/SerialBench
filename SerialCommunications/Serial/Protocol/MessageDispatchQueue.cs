@@ -93,7 +93,7 @@ internal sealed class MessageDispatchQueue : IDisposable
             decoder.Reset();
             ApplyPendingDecoder();
         }
-        while (queue.TryDequeue(out _) { }
+        while (queue.TryDequeue(out _)) { }
     }
 
     private void Enqueue(DecodedMessage message)
@@ -137,7 +137,7 @@ internal sealed class MessageDispatchQueue : IDisposable
         }
         finally
         {
-            while (queue.TryDequeue(out _) { }
+            while (queue.TryDequeue(out _)) { }
             signal.Dispose();
         }
     }
@@ -145,7 +145,7 @@ internal sealed class MessageDispatchQueue : IDisposable
     private void ReportError(Exception exception)
     {
         try { consumerError?.Invoke(exception); }
-        catch { }
+        catch { /* Error reporting must not terminate receive decoding or dispatch. */ }
     }
 
     public void Dispose()
@@ -155,13 +155,15 @@ internal sealed class MessageDispatchQueue : IDisposable
             if (disposed) return;
             disposed = true;
             active = false;
-            while (queue.TryDequeue(out _) { }
+            while (queue.TryDequeue(out _)) { }
             if (worker.IsAlive)
             {
                 try { signal.Set(); }
                 catch (ObjectDisposedException) { }
             }
         }
+        // Deliberately do not join. A consumer is application code and may block indefinitely;
+        // serial disconnect/disposal must never inherit that lifetime.
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(disposed, this);
