@@ -1,7 +1,7 @@
 namespace SerialCommunications.Serial.Protocol;
 
 /// <summary>Composes independent framing and check strategies into a message decoder.</summary>
-public sealed class MessageDecoder(IMessageFramer framer, IMessageCheck check) : IMessageDecoder
+internal sealed class MessageDecoder(IMessageFramer framer, IMessageCheck check) : IMessageDecoder
 {
     private readonly IMessageFramer framer = framer ?? throw new ArgumentNullException(nameof(framer));
     private readonly IMessageCheck check = check ?? throw new ArgumentNullException(nameof(check));
