@@ -4,11 +4,20 @@
 
 ## Current checkpoint
 
-SerialBench is an interactive serial communications investigation/diagnostic application. `SerialCommunications` is now an independent repository and reusable serial-device communications library intended for SerialBench and automated consumers such as AeonHacs.
+SerialBench is an interactive serial communications investigation/diagnostic application. `SerialCommunications` is an independent repository and reusable serial-device communications library intended for SerialBench and automated consumers such as AeonHacs.
 
 The repository split was completed in October 2026. The former `RoyHinkley/SerialPortTerminal` repository was detached from its upstream fork network and renamed `RoyHinkley/SerialBench`, preserving the application's development history. `RoyHinkley/SerialCommunications` was created as an independent repository from the reviewed library source at the split checkpoint.
 
-For source development the repositories are currently expected to be sibling directories. `SerialBench.csproj` references `../SerialCommunications/SerialCommunications.csproj`, and `SerialBench.sln` includes that sibling project.
+The split and immediate cleanup are complete:
+
+- library-focused tests live in `SerialCommunications.Tests`; SerialBench retains application-focused tests;
+- the library exposes internals only to `SerialCommunications.Tests`;
+- stale `SerialDevice...` test names were changed to `SerialChannel...` terminology;
+- both repositories build and test independently in GitHub Actions;
+- SerialBench CI checks out SerialCommunications as a sibling to satisfy the source-level project reference;
+- the obsolete Avalonia `TextBox.Watermark` use was replaced with `PlaceholderText`.
+
+For source development the repositories are expected to be sibling directories. `SerialBench.csproj` references `../SerialCommunications/SerialCommunications.csproj`, and `SerialBench.sln` includes that sibling project.
 
 Core boundary: the library supplies faithful communications mechanisms, state, diagnostics, telemetry, and reusable conversion/checking tools. SerialBench owns human presentation, persistence/profiles, logging policy, and interactive behavior. Instrument consumers own command/response meaning.
 
@@ -30,12 +39,6 @@ Keep connection intent, transport availability, and communications health indepe
 - Generic XOR and additive checksum algorithms are fixed at the demonstrated zero-seeded calculations. Do not expose speculative initial-accumulator configuration without a concrete protocol requirement.
 - XML documentation is maintained deliberately where it adds API meaning. Do not enable CS1591 merely to require comments on every public identifier; omitted comments may be intentional.
 
-## Post-split cleanup
-
-- Move tests that exercise SerialCommunications internals and library behavior from `SerialBench.Tests` into a library-owned `SerialCommunications.Tests` project. Keep application/parser/UI-facing tests in SerialBench. Once complete, change the library's `InternalsVisibleTo` target from `SerialBench.Tests` to `SerialCommunications.Tests`.
-- Keep both repositories independently buildable in CI. SerialBench CI must check out SerialCommunications as a sibling while the source-level project reference remains in use.
-- After the test move, each repository should own the tests and CI for its own behavior; SerialBench may retain integration tests that intentionally cross the boundary.
-
 ## SerialBench deferred work
 
 - Normalized data recording remains application responsibility; authoritative library data stays faithful.
@@ -46,7 +49,7 @@ Keep connection intent, transport availability, and communications health indepe
 - Revisit configuration UI (flyout/drawer remains favored over a permanent dense pane).
 - Add named profiles/connection names.
 - Validate self-contained Windows deployment on a clean machine and writable settings/log locations.
-- Replace obsolete Avalonia `TextBox.Watermark` with `PlaceholderText`.
+- Change the main window title from the historical `Serial Port Terminal` to `SerialBench` when product-facing naming cleanup is addressed.
 
 ## SerialCommunications deferred work
 
@@ -55,7 +58,6 @@ Track library-specific work primarily in the SerialCommunications repository. Cu
 - Continue concise XML documentation where public API semantics benefit from it: non-obvious behavior, units, defaults, special values, lifetime/threading behavior, and exact check algorithms. Avoid tautological boilerplate and do not use CS1591 as a compliance requirement.
 - Verify RTS Toggle behavior with current .NET/Windows and representative adapters only when a target setup requires it; do not restore reflection into private `SerialPort` internals.
 - Add genuinely unframed streaming only for a demonstrated use case.
-- Clean stale `SerialDevice` test filenames/names as part of moving library tests to their own repository.
 
 ## Development rules
 
