@@ -11,11 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="SerialCommunications\**\*.cs" />
     <Compile Remove="SerialBench.Tests\**\*.cs" />
-    <EmbeddedResource Remove="SerialCommunications\**\*" />
     <EmbeddedResource Remove="SerialBench.Tests\**\*" />
-    <None Remove="SerialCommunications\**\*" />
     <None Remove="SerialBench.Tests\**\*" />
   </ItemGroup>
 
