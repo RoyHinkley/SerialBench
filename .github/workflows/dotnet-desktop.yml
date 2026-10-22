@@ -11,8 +11,16 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout SerialBench
         uses: actions/checkout@v4
+        with:
+          path: SerialBench
+
+      - name: Checkout SerialCommunications
+        uses: actions/checkout@v4
+        with:
+          repository: RoyHinkley/SerialCommunications
+          path: SerialCommunications
 
       - name: Install .NET
         uses: actions/setup-dotnet@v4
@@ -20,10 +28,13 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
+        working-directory: SerialBench
         run: dotnet restore "SerialBench.sln"
 
       - name: Build
+        working-directory: SerialBench
         run: dotnet build "SerialBench.sln" --configuration Release --no-restore
 
       - name: Test
+        working-directory: SerialBench
         run: dotnet test "SerialBench.sln" --configuration Release --no-build
