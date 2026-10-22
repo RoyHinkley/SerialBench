@@ -72,6 +72,67 @@ public sealed class SerialChannelSemanticsTests
     }
 
     [Fact]
+    public void Checksum_receive_exposes_generic_evidence_without_crc_evidence()
+    {
+        var factory = new FakeSerialTransportFactory();
+        var transport = factory.Enqueue();
+        using var channel = new SerialChannel(new SerialChannelConfiguration(new SerialPortSettings("TEST", 115200))
+        {
+            ProtocolSettings = SerialProtocolSettings.Checksum(),
+            MaximumMillisecondsSilenceInMessage = 5
+        }, factory);
+        ReceivedData? delivered = null;
+        channel.DataReceived += data => delivered = data;
+        Assert.True(channel.Connect());
+
+        transport.EnqueueReceived(0x10, 0x20, 0x31, 0x61);
+        transport.RaiseDataReceived();
+
+        Assert.True(SpinWait.SpinUntil(() => delivered is not null, TimeSpan.FromSeconds(2)));
+        Assert.True(delivered!.CheckValid);
+        Assert.Null(delivered.CrcValid);
+        Assert.Null(delivered.ReceivedCrc);
+        Assert.Null(delivered.CalculatedResidue);
+        Assert.Null(delivered.ExpectedResidue);
+        Assert.True(delivered.CrcBytes.IsEmpty);
+        Assert.Equal(new byte[] { 0x10, 0x20, 0x31 }, delivered.PayloadBytes.ToArray());
+        Assert.Equal(1, channel.Telemetry.MessagesReceived);
+        Assert.Equal(0, channel.Telemetry.CheckFailures);
+    }
+
+    [Fact]
+    public void Telemetry_reset_clears_measurements_without_affecting_channel_operation()
+    {
+        var factory = new FakeSerialTransportFactory();
+        var transport = factory.Enqueue();
+        using var channel = new SerialChannel(new SerialPortSettings("TEST", 115200), factory);
+        Assert.True(channel.Connect());
+
+        Assert.True(channel.Command(new byte[] { 0x41 }));
+        transport.EnqueueReceived(0x42);
+        transport.RaiseDataReceived();
+        Assert.True(SpinWait.SpinUntil(() =>
+            channel.Telemetry.MessagesTransmitted == 1 && channel.Telemetry.MessagesReceived == 1,
+            TimeSpan.FromSeconds(2)));
+        Assert.True(channel.Telemetry.BytesReceived > 0);
+        Assert.True(channel.Telemetry.ReceiveNotifications > 0);
+
+        channel.Telemetry.Reset();
+
+        Assert.Equal(0, channel.Telemetry.BytesReceived);
+        Assert.Equal(0, channel.Telemetry.MessagesReceived);
+        Assert.Equal(0, channel.Telemetry.MessagesTransmitted);
+        Assert.Equal(0, channel.Telemetry.CheckFailures);
+        Assert.Equal(0, channel.Telemetry.ReceiveNotifications);
+        Assert.Equal(0, channel.Telemetry.RecoveryAttempts);
+        Assert.Equal(0, channel.Telemetry.SuccessfulRecoveries);
+        Assert.True(channel.IsConnected);
+
+        Assert.True(channel.Command(new byte[] { 0x43 }));
+        Assert.True(SpinWait.SpinUntil(() => channel.Telemetry.MessagesTransmitted == 1, TimeSpan.FromSeconds(2)));
+    }
+
+    [Fact]
     public void Successful_transmission_is_counted_and_traced_after_write()
     {
         var factory = new FakeSerialTransportFactory();
