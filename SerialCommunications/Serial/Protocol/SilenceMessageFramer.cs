@@ -5,11 +5,10 @@ namespace SerialCommunications.Serial.Protocol;
 /// Silence framing is deliberately separate from receive coalescing. A transport may consolidate delivery chunks
 /// for efficiency without asserting a message boundary; only <see cref="SilenceElapsed"/> completes this frame.
 /// </remarks>
-public sealed class SilenceMessageFramer : IMessageFramer
+internal sealed class SilenceMessageFramer : IMessageFramer
 {
     private readonly List<byte> pending = [];
 
-    /// <inheritdoc />
     public bool HasPendingData => pending.Count != 0;
 
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
