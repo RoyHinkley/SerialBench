@@ -8,7 +8,7 @@ namespace SerialCommunications.Serial.Protocol;
 /// frames for a given byte stream regardless of the sizes of the chunks supplied by the transport.
 /// <see cref="SilenceElapsed"/> is explicit because silence is meaningful only to framers configured to use it.
 /// </remarks>
-public interface IMessageFramer
+internal interface IMessageFramer
 {
     /// <summary>Whether bytes belonging to an incomplete frame are currently buffered.</summary>
     bool HasPendingData { get; }
