@@ -10,7 +10,7 @@ namespace SerialCommunications.Serial.Protocol;
 /// Each received byte is examined as a possible terminator at most once; previously rejected candidates are not
 /// rescanned as later bytes arrive.
 /// </remarks>
-public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
+internal sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
 {
     private readonly byte terminator;
     private readonly IMessageCheck check;
@@ -18,7 +18,6 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
     private int pendingTerminator = -1;
     private int nextTerminatorSearch;
 
-    /// <summary>Creates a terminator framer whose fixed-width trailer is described by <paramref name="check"/>.</summary>
     public TrailerAwareTerminatorMessageFramer(byte terminator, IMessageCheck check)
     {
         ArgumentNullException.ThrowIfNull(check);
@@ -29,10 +28,8 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
         this.check = check;
     }
 
-    /// <inheritdoc />
     public bool HasPendingData => buffer.Count != 0;
 
-    /// <inheritdoc />
     public void Consume(ReadOnlySpan<byte> bytes, Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
@@ -44,7 +41,6 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
         }
     }
 
-    /// <inheritdoc />
     public void SilenceElapsed(Action<ReadOnlyMemory<byte>> frameReady)
     {
         ArgumentNullException.ThrowIfNull(frameReady);
@@ -52,7 +48,6 @@ public sealed class TrailerAwareTerminatorMessageFramer : IMessageFramer
             EmitAtPendingTerminator(frameReady);
     }
 
-    /// <inheritdoc />
     public void Reset()
     {
         buffer.Clear();
