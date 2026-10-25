@@ -37,15 +37,16 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     private int millisecondsBetweenMessages = -1;
     private int millisecondsBetweenBytes = -1;
     private int maximumMillisecondsSilenceInMessage = 5;
-    private bool useCrc = true;
+    private FrameLayout frameLayout = FrameLayout.PCE;
+    private string startExpression = string.Empty;
+    private string endExpression = @"\x03";
+    private MessageCheckKind checkKind = MessageCheckKind.Crc16;
     private string crcPolynomial = "DAAE";
     private string crcInitialValue = "FFFF";
     private string crcExpectedResidue = "82C0";
-    private string termChar = "03";
     private bool crcPostInvert = true;
     private bool crcMsBitFirst;
     private bool crcMsByteFirst;
-    private bool omitTermChar;
     private bool suppressCrcErrors;
     private bool includeDetailedTransportEvents;
     private bool logSignals;
@@ -66,15 +67,16 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     public int MillisecondsBetweenMessages { get => millisecondsBetweenMessages; set => Set(ref millisecondsBetweenMessages, Math.Max(-1, value)); }
     public int MillisecondsBetweenBytes { get => millisecondsBetweenBytes; set => Set(ref millisecondsBetweenBytes, Math.Max(-1, value)); }
     public int MaximumMillisecondsSilenceInMessage { get => maximumMillisecondsSilenceInMessage; set => Set(ref maximumMillisecondsSilenceInMessage, Math.Max(0, value)); }
-    public bool UseCrc { get => useCrc; set => Set(ref useCrc, value); }
+    public FrameLayout FrameLayout { get => frameLayout; set => Set(ref frameLayout, value); }
+    public string StartExpression { get => startExpression; set => Set(ref startExpression, value); }
+    public string EndExpression { get => endExpression; set => Set(ref endExpression, value); }
+    public MessageCheckKind CheckKind { get => checkKind; set => Set(ref checkKind, value); }
     public string CrcPolynomial { get => crcPolynomial; set => Set(ref crcPolynomial, value); }
     public string CrcInitialValue { get => crcInitialValue; set => Set(ref crcInitialValue, value); }
     public string CrcExpectedResidue { get => crcExpectedResidue; set => Set(ref crcExpectedResidue, value); }
-    public string TermChar { get => termChar; set => Set(ref termChar, value); }
     public bool CrcPostInvert { get => crcPostInvert; set => Set(ref crcPostInvert, value); }
     public bool CrcMsBitFirst { get => crcMsBitFirst; set => Set(ref crcMsBitFirst, value); }
     public bool CrcMsByteFirst { get => crcMsByteFirst; set => Set(ref crcMsByteFirst, value); }
-    public bool OmitTermChar { get => omitTermChar; set => Set(ref omitTermChar, value); }
     public bool SuppressCrcErrors { get => suppressCrcErrors; set => Set(ref suppressCrcErrors, value); }
     public bool IncludeDetailedTransportEvents { get => includeDetailedTransportEvents; set => Set(ref includeDetailedTransportEvents, value); }
     public bool LogSignals { get => logSignals; set => Set(ref logSignals, value); }
@@ -105,9 +107,9 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     {
         var connection = $"{PortName ?? "(no port)"} {BaudRate} {DataBits}{ParityAbbreviation(Parity)}{StopBitsAbbreviation(StopBits)}, handshake={Handshake}, RTS={RtsMode}" +
             $", messagePacing={MillisecondsBetweenMessages}ms bytePacing={MillisecondsBetweenBytes}ms receiveSilence={MaximumMillisecondsSilenceInMessage}ms";
-        var framing = OmitTermChar ? ", framing=silence" : $", framing=term({TermChar})";
-        if (!UseCrc) return connection + framing + ", CRC=off";
-        return connection + framing + $", CRC=on poly={CrcPolynomial} initial={CrcInitialValue} residue={CrcExpectedResidue}" +
+        var protocol = $", layout={FrameLayout} start=\"{StartExpression}\" end=\"{EndExpression}\" check={CheckKind}";
+        if (CheckKind != MessageCheckKind.Crc16) return connection + protocol;
+        return connection + protocol + $" poly={CrcPolynomial} initial={CrcInitialValue} residue={CrcExpectedResidue}" +
             $" postInvert={CrcPostInvert} msBitFirst={CrcMsBitFirst} msByteFirst={CrcMsByteFirst}" +
             $" suppressCrcErrors={SuppressCrcErrors}";
     }
@@ -122,7 +124,7 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     {
         options = null;
         error = null;
-        if (!UseCrc) return true;
+        if (CheckKind != MessageCheckKind.Crc16) return true;
         if (!TryHex16(CrcPolynomial, "CRC polynomial", out var polynomial, out error) ||
             !TryHex16(CrcInitialValue, "CRC initial value", out var initial, out error) ||
             !TryHex16(CrcExpectedResidue, "CRC expected residue", out var residue, out error))
@@ -135,27 +137,20 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     public bool TryCreateProtocolSettings(out SerialProtocolSettings? settings, out string? error)
     {
         settings = null;
+        if (!ByteExpression.TryParse(StartExpression, out var start, out error)) { error = $"Invalid start sequence: {error}"; return false; }
+        if (!ByteExpression.TryParse(EndExpression, out var end, out error)) { error = $"Invalid end sequence: {error}"; return false; }
         if (!TryCreateCrcOptions(out var crc, out error)) return false;
 
-        byte[] end = [];
-        if (!OmitTermChar)
+        if (LayoutHasCheck(FrameLayout) && crc is null)
         {
-            if (!TryHex8(TermChar, "termination character", out var term, out error)) return false;
-            end = [term];
+            error = $"Frame layout {FrameLayout} contains C and requires a message check.";
+            return false;
         }
 
-        if (crc is null)
-        {
-            settings = OmitTermChar
-                ? SerialProtocolSettings.None(FrameLayout.P, suppressInvalidMessages: SuppressCrcErrors)
-                : SerialProtocolSettings.None(FrameLayout.PE, end: end, suppressInvalidMessages: SuppressCrcErrors);
-        }
-        else
-        {
-            settings = OmitTermChar
-                ? SerialProtocolSettings.Crc16(crc, FrameLayout.PC, suppressInvalidMessages: SuppressCrcErrors)
-                : SerialProtocolSettings.Crc16(crc, FrameLayout.PCE, end: end, suppressInvalidMessages: SuppressCrcErrors);
-        }
+        settings = crc is null
+            ? SerialProtocolSettings.None(FrameLayout, start, end, SuppressCrcErrors)
+            : SerialProtocolSettings.Crc16(crc, FrameLayout, start, end, SuppressCrcErrors);
+        error = null;
         return true;
     }
 
@@ -178,10 +173,10 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
         return true;
     }
 
+    private static bool LayoutHasCheck(FrameLayout layout) => layout is FrameLayout.PC or FrameLayout.PEC or FrameLayout.SPC or FrameLayout.SPEC or FrameLayout.PCE;
     private static string ParityAbbreviation(Parity value) => value switch { Parity.None => "N", Parity.Odd => "O", Parity.Even => "E", Parity.Mark => "M", Parity.Space => "S", _ => value.ToString() };
     private static string StopBitsAbbreviation(StopBits value) => value switch { StopBits.One => "1", StopBits.OnePointFive => "1.5", StopBits.Two => "2", _ => value.ToString() };
     private static bool TryHex16(string text, string name, out ushort value, out string? error) { if (ushort.TryParse(NormalizeHex(text), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value)) { error = null; return true; } error = $"Invalid {name}: '{text}'. Enter 1-4 hexadecimal digits."; return false; }
-    private static bool TryHex8(string text, string name, out byte value, out string? error) { if (byte.TryParse(NormalizeHex(text), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value)) { error = null; return true; } error = $"Invalid {name}: '{text}'. Enter 1-2 hexadecimal digits."; return false; }
     private static string NormalizeHex(string? text) { var value = text?.Trim() ?? string.Empty; return value.StartsWith("0x", StringComparison.OrdinalIgnoreCase) ? value[2..] : value; }
     private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null) { if (EqualityComparer<T>.Default.Equals(field, value)) return; var oldValue = field; field = value; PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName)); Changed?.Invoke(this, new ConfigurationChangedEventArgs(propertyName!, oldValue, value)); }
 }
