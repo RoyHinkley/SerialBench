@@ -105,10 +105,11 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
     {
         var connection = $"{PortName ?? "(no port)"} {BaudRate} {DataBits}{ParityAbbreviation(Parity)}{StopBitsAbbreviation(StopBits)}, handshake={Handshake}, RTS={RtsMode}" +
             $", messagePacing={MillisecondsBetweenMessages}ms bytePacing={MillisecondsBetweenBytes}ms receiveSilence={MaximumMillisecondsSilenceInMessage}ms";
-        if (!UseCrc) return connection + ", CRC=off";
-        return connection + $", CRC=on poly={CrcPolynomial} initial={CrcInitialValue} residue={CrcExpectedResidue}" +
-            $" term={TermChar} postInvert={CrcPostInvert} msBitFirst={CrcMsBitFirst} msByteFirst={CrcMsByteFirst}" +
-            $" omitTermChar={OmitTermChar} suppressCrcErrors={SuppressCrcErrors}";
+        var framing = OmitTermChar ? ", framing=silence" : $", framing=term({TermChar})";
+        if (!UseCrc) return connection + framing + ", CRC=off";
+        return connection + framing + $", CRC=on poly={CrcPolynomial} initial={CrcInitialValue} residue={CrcExpectedResidue}" +
+            $" postInvert={CrcPostInvert} msBitFirst={CrcMsBitFirst} msByteFirst={CrcMsByteFirst}" +
+            $" suppressCrcErrors={SuppressCrcErrors}";
     }
 
     public SerialPortSettings CreatePortSettings()
@@ -119,18 +120,42 @@ public sealed class TerminalConfiguration : INotifyPropertyChanged
 
     public bool TryCreateCrcOptions(out CrcOptions? options, out string? error)
     {
-        options = null; error = null;
+        options = null;
+        error = null;
         if (!UseCrc) return true;
-        if (!TryHex16(CrcPolynomial, "CRC polynomial", out var polynomial, out error) || !TryHex16(CrcInitialValue, "CRC initial value", out var initial, out error) || !TryHex16(CrcExpectedResidue, "CRC expected residue", out var residue, out error) || !TryHex8(TermChar, "termination character", out var term, out error)) return false;
-        options = new CrcOptions(initial, polynomial, residue, CrcPostInvert, CrcMsBitFirst, CrcMsByteFirst, term, OmitTermChar); return true;
+        if (!TryHex16(CrcPolynomial, "CRC polynomial", out var polynomial, out error) ||
+            !TryHex16(CrcInitialValue, "CRC initial value", out var initial, out error) ||
+            !TryHex16(CrcExpectedResidue, "CRC expected residue", out var residue, out error))
+            return false;
+        options = new CrcOptions(initial, polynomial, residue, CrcPostInvert, CrcMsBitFirst, CrcMsByteFirst);
+        return true;
     }
 
-    /// <summary>Builds one immutable protocol snapshot so transport code never observes a partially edited configuration.</summary>
+    /// <summary>Builds one immutable framing/check snapshot so transport code never observes a partially edited configuration.</summary>
     public bool TryCreateProtocolSettings(out SerialProtocolSettings? settings, out string? error)
     {
         settings = null;
         if (!TryCreateCrcOptions(out var crc, out error)) return false;
-        settings = SerialProtocolSettings.From(crc, SuppressCrcErrors);
+
+        byte[] end = [];
+        if (!OmitTermChar)
+        {
+            if (!TryHex8(TermChar, "termination character", out var term, out error)) return false;
+            end = [term];
+        }
+
+        if (crc is null)
+        {
+            settings = OmitTermChar
+                ? SerialProtocolSettings.None(FrameLayout.P, suppressInvalidMessages: SuppressCrcErrors)
+                : SerialProtocolSettings.None(FrameLayout.PE, end: end, suppressInvalidMessages: SuppressCrcErrors);
+        }
+        else
+        {
+            settings = OmitTermChar
+                ? SerialProtocolSettings.Crc16(crc, FrameLayout.PC, suppressInvalidMessages: SuppressCrcErrors)
+                : SerialProtocolSettings.Crc16(crc, FrameLayout.PCE, end: end, suppressInvalidMessages: SuppressCrcErrors);
+        }
         return true;
     }
 
