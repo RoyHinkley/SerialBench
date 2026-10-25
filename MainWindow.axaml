@@ -9,14 +9,17 @@
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="MinWidth" Value="150" />
         </Style>
-        <Style Selector="ComboBox.numericConnectionValue">
-            <Setter Property="HorizontalContentAlignment" Value="Right" />
-        </Style>
+        <Style Selector="ComboBox.numericConnectionValue"><Setter Property="HorizontalContentAlignment" Value="Right" /></Style>
         <Style Selector="TextBox.crcValue">
             <Setter Property="TextAlignment" Value="Right" />
             <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
             <Setter Property="Width" Value="90" />
             <Setter Property="HorizontalAlignment" Value="Right" />
+        </Style>
+        <Style Selector="TextBox.byteExpression">
+            <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
+            <Setter Property="MinWidth" Value="150" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <Style Selector="Button.terminalAction">
             <Setter Property="Width" Value="72" />
@@ -24,16 +27,10 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="shapes|Ellipse.signalLed">
-            <Setter Property="Width" Value="10" />
-            <Setter Property="Height" Value="10" />
-            <Setter Property="Fill" Value="#707070" />
-            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Width" Value="10" /><Setter Property="Height" Value="10" /><Setter Property="Fill" Value="#707070" /><Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="Border.sectionRule">
-            <Setter Property="Height" Value="1" />
-            <Setter Property="Background" Value="#505050" />
-            <Setter Property="Opacity" Value="0.7" />
-            <Setter Property="Margin" Value="0,1,0,2" />
+            <Setter Property="Height" Value="1" /><Setter Property="Background" Value="#505050" /><Setter Property="Opacity" Value="0.7" /><Setter Property="Margin" Value="0,1,0,2" />
         </Style>
     </Window.Styles>
     <Grid RowDefinitions="*,Auto" Margin="16" RowSpacing="12">
@@ -42,152 +39,73 @@
                 <StackPanel Spacing="12">
                     <Border Padding="12" BorderThickness="1" CornerRadius="4">
                         <StackPanel Spacing="10">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="Connection" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <TextBlock x:Name="ConnectionStatus" Grid.Column="1" Text="Disconnected" VerticalAlignment="Center" Opacity="0.75" />
-                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Connection" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" /><TextBlock x:Name="ConnectionStatus" Grid.Column="1" Text="Disconnected" VerticalAlignment="Center" Opacity="0.75" /></Grid>
                             <Border Classes="sectionRule"/>
                             <Grid ColumnDefinitions="100,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="8">
-                                <TextBlock Grid.Row="0" Text="Port" VerticalAlignment="Center" />
-                                <ComboBox x:Name="PortBox" Classes="connectionValue" Grid.Row="0" Grid.Column="1" SelectedItem="{Binding PortName, Mode=TwoWay}" />
-                                <Button x:Name="RefreshPortsButton" Grid.Row="0" Grid.Column="2" Content="↻" Width="34" Click="RefreshPorts_Click" />
-                                <TextBlock Grid.Row="1" Text="Baud" VerticalAlignment="Center" />
-                                <ComboBox x:Name="BaudBox" Classes="connectionValue numericConnectionValue" Grid.Row="1" Grid.Column="1" SelectedItem="{Binding BaudRate, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="2" Text="Data bits" VerticalAlignment="Center" />
-                                <ComboBox x:Name="DataBitsBox" Classes="connectionValue numericConnectionValue" Grid.Row="2" Grid.Column="1" SelectedItem="{Binding DataBits, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="3" Text="Parity" VerticalAlignment="Center" />
-                                <ComboBox x:Name="ParityBox" Classes="connectionValue" Grid.Row="3" Grid.Column="1" SelectedItem="{Binding Parity, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="4" Text="Stop bits" VerticalAlignment="Center" />
-                                <ComboBox x:Name="StopBitsBox" Classes="connectionValue" Grid.Row="4" Grid.Column="1" SelectedItem="{Binding StopBits, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="5" Text="Handshake" VerticalAlignment="Center" />
-                                <ComboBox x:Name="HandshakeBox" Classes="connectionValue" Grid.Row="5" Grid.Column="1" SelectedItem="{Binding Handshake, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="6" Text="RTS" VerticalAlignment="Center" />
-                                <ComboBox x:Name="RtsBox" Classes="connectionValue" Grid.Row="6" Grid.Column="1" SelectedItem="{Binding RtsMode, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="0" Text="Port" VerticalAlignment="Center" /><ComboBox x:Name="PortBox" Classes="connectionValue" Grid.Row="0" Grid.Column="1" SelectedItem="{Binding PortName, Mode=TwoWay}" /><Button x:Name="RefreshPortsButton" Grid.Row="0" Grid.Column="2" Content="↻" Width="34" Click="RefreshPorts_Click" />
+                                <TextBlock Grid.Row="1" Text="Baud" VerticalAlignment="Center" /><ComboBox x:Name="BaudBox" Classes="connectionValue numericConnectionValue" Grid.Row="1" Grid.Column="1" SelectedItem="{Binding BaudRate, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="2" Text="Data bits" VerticalAlignment="Center" /><ComboBox x:Name="DataBitsBox" Classes="connectionValue numericConnectionValue" Grid.Row="2" Grid.Column="1" SelectedItem="{Binding DataBits, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="3" Text="Parity" VerticalAlignment="Center" /><ComboBox x:Name="ParityBox" Classes="connectionValue" Grid.Row="3" Grid.Column="1" SelectedItem="{Binding Parity, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="4" Text="Stop bits" VerticalAlignment="Center" /><ComboBox x:Name="StopBitsBox" Classes="connectionValue" Grid.Row="4" Grid.Column="1" SelectedItem="{Binding StopBits, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="5" Text="Handshake" VerticalAlignment="Center" /><ComboBox x:Name="HandshakeBox" Classes="connectionValue" Grid.Row="5" Grid.Column="1" SelectedItem="{Binding Handshake, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="6" Text="RTS" VerticalAlignment="Center" /><ComboBox x:Name="RtsBox" Classes="connectionValue" Grid.Row="6" Grid.Column="1" SelectedItem="{Binding RtsMode, Mode=TwoWay}" />
                                 <Button x:Name="ConnectButton" Grid.Row="7" Grid.Column="1" Content="Connect" Click="Connect_Click" HorizontalAlignment="Right" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" MinWidth="92" />
                             </Grid>
                         </StackPanel>
                     </Border>
                     <Border Padding="12" BorderThickness="1" CornerRadius="4">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Received display" FontSize="16" FontWeight="SemiBold" />
-                            <Border Classes="sectionRule"/>
-                            <ComboBox x:Name="ReceivedFormatBox" SelectedItem="{Binding ReceivedDataFormat, Mode=TwoWay}" />
-                            <CheckBox Content="Show CRC bytes" IsChecked="{Binding ShowCrcBytes, Mode=TwoWay}" />
-                            <CheckBox Content="Suppress messages with CRC errors" IsChecked="{Binding SuppressCrcErrors, Mode=TwoWay}" />
-                        </StackPanel>
+                        <StackPanel Spacing="8"><TextBlock Text="Received display" FontSize="16" FontWeight="SemiBold" /><Border Classes="sectionRule"/><ComboBox x:Name="ReceivedFormatBox" SelectedItem="{Binding ReceivedDataFormat, Mode=TwoWay}" /><CheckBox Content="Show CRC bytes" IsChecked="{Binding ShowCrcBytes, Mode=TwoWay}" /><CheckBox Content="Suppress messages with CRC errors" IsChecked="{Binding SuppressCrcErrors, Mode=TwoWay}" /></StackPanel>
+                    </Border>
+                    <Border Padding="12" BorderThickness="1" CornerRadius="4">
+                        <StackPanel Spacing="8"><TextBlock Text="Diagnostic logging" FontSize="16" FontWeight="SemiBold" /><Border Classes="sectionRule"/><CheckBox Content="Include detailed transport events" IsChecked="{Binding IncludeDetailedTransportEvents, Mode=TwoWay}" /><CheckBox Content="Log signals" IsChecked="{Binding LogSignals, Mode=TwoWay}" /><TextBlock Text="The automatic session log continues even when detailed events are disabled." TextWrapping="Wrap" Opacity="0.65" /></StackPanel>
                     </Border>
                     <Border Padding="12" BorderThickness="1" CornerRadius="4">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Diagnostic logging" FontSize="16" FontWeight="SemiBold" />
-                            <Border Classes="sectionRule"/>
-                            <CheckBox Content="Include detailed transport events" IsChecked="{Binding IncludeDetailedTransportEvents, Mode=TwoWay}" />
-                            <CheckBox Content="Log signals" IsChecked="{Binding LogSignals, Mode=TwoWay}" />
-                            <TextBlock Text="The automatic session log continues even when detailed events are disabled." TextWrapping="Wrap" Opacity="0.65" />
-                        </StackPanel>
-                    </Border>
-                    <Border Padding="12" BorderThickness="1" CornerRadius="4">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="Timing" FontSize="16" FontWeight="SemiBold" />
-                            <Border Classes="sectionRule"/>
+                            <TextBlock Text="Timing" FontSize="16" FontWeight="SemiBold" /><Border Classes="sectionRule"/>
                             <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-                                <TextBlock Text="Between messages" VerticalAlignment="Center" />
-                                <NumericUpDown Classes="timing" Grid.Column="1" Value="{Binding MillisecondsBetweenMessages, Mode=TwoWay}" Minimum="-1" Maximum="60000" FormatString="0" />
-                                <TextBlock Grid.Row="1" Text="Between bytes" VerticalAlignment="Center" />
-                                <NumericUpDown Classes="timing" Grid.Row="1" Grid.Column="1" Value="{Binding MillisecondsBetweenBytes, Mode=TwoWay}" Minimum="-1" Maximum="60000" FormatString="0" />
-                                <TextBlock Grid.Row="2" Text="Receive silence" VerticalAlignment="Center" />
-                                <NumericUpDown Classes="timing" Grid.Row="2" Grid.Column="1" Value="{Binding MaximumMillisecondsSilenceInMessage, Mode=TwoWay}" Minimum="0" Maximum="60000" FormatString="0" />
+                                <TextBlock Text="Between messages" VerticalAlignment="Center" /><NumericUpDown Classes="timing" Grid.Column="1" Value="{Binding MillisecondsBetweenMessages, Mode=TwoWay}" Minimum="-1" Maximum="60000" FormatString="0" />
+                                <TextBlock Grid.Row="1" Text="Between bytes" VerticalAlignment="Center" /><NumericUpDown Classes="timing" Grid.Row="1" Grid.Column="1" Value="{Binding MillisecondsBetweenBytes, Mode=TwoWay}" Minimum="-1" Maximum="60000" FormatString="0" />
+                                <TextBlock Grid.Row="2" Text="Receive silence" VerticalAlignment="Center" /><NumericUpDown Classes="timing" Grid.Row="2" Grid.Column="1" Value="{Binding MaximumMillisecondsSilenceInMessage, Mode=TwoWay}" Minimum="0" Maximum="60000" FormatString="0" />
                             </Grid>
                             <TextBlock Text="Milliseconds. -1 disables transmit pacing." TextWrapping="Wrap" Opacity="0.65" />
                         </StackPanel>
                     </Border>
                     <Border Padding="12" BorderThickness="1" CornerRadius="4">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Protocol" FontSize="16" FontWeight="SemiBold" />
-                            <Border Classes="sectionRule"/>
-                            <CheckBox x:Name="CrcBox" Content="Use CRC" IsChecked="{Binding UseCrc, Mode=TwoWay}" />
+                            <TextBlock Text="Protocol" FontSize="16" FontWeight="SemiBold" /><Border Classes="sectionRule"/>
                             <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
-                                <TextBlock Text="Polynomial" VerticalAlignment="Center" />
-                                <TextBox x:Name="CrcPolynomialBox" Classes="crcValue" Grid.Column="1" Text="{Binding CrcPolynomial, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="1" Text="Initial" VerticalAlignment="Center" />
-                                <TextBox x:Name="CrcInitialBox" Classes="crcValue" Grid.Row="1" Grid.Column="1" Text="{Binding CrcInitialValue, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="2" Text="Residue" VerticalAlignment="Center" />
-                                <TextBox x:Name="CrcResidueBox" Classes="crcValue" Grid.Row="2" Grid.Column="1" Text="{Binding CrcExpectedResidue, Mode=TwoWay}" />
-                                <TextBlock Grid.Row="3" Text="Term char" VerticalAlignment="Center" />
-                                <TextBox x:Name="TermCharBox" Classes="crcValue" Grid.Row="3" Grid.Column="1" Text="{Binding TermChar, Mode=TwoWay}" />
+                                <TextBlock Text="Layout" VerticalAlignment="Center" /><ComboBox x:Name="FrameLayoutBox" Grid.Column="1" SelectedItem="{Binding FrameLayout, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="1" Text="Start" VerticalAlignment="Center" /><TextBox x:Name="StartExpressionBox" Classes="byteExpression" Grid.Row="1" Grid.Column="1" Text="{Binding StartExpression, Mode=TwoWay}" PlaceholderText="Byte expression" />
+                                <TextBlock Grid.Row="2" Text="End" VerticalAlignment="Center" /><TextBox x:Name="EndExpressionBox" Classes="byteExpression" Grid.Row="2" Grid.Column="1" Text="{Binding EndExpression, Mode=TwoWay}" PlaceholderText="Byte expression" />
+                                <TextBlock Grid.Row="3" Text="Check" VerticalAlignment="Center" /><ComboBox x:Name="CheckKindBox" Grid.Row="3" Grid.Column="1" SelectedItem="{Binding CheckKind, Mode=TwoWay}" />
                             </Grid>
-                            <CheckBox x:Name="CrcPostInvertBox" Content="Post-invert CRC" IsChecked="{Binding CrcPostInvert, Mode=TwoWay}" />
-                            <CheckBox x:Name="CrcMsBitFirstBox" Content="MS bit first" IsChecked="{Binding CrcMsBitFirst, Mode=TwoWay}" />
-                            <CheckBox x:Name="CrcMsByteFirstBox" Content="MS byte first" IsChecked="{Binding CrcMsByteFirst, Mode=TwoWay}" />
-                            <CheckBox x:Name="OmitTermCharBox" Content="No term character (silence framed)" IsChecked="{Binding OmitTermChar, Mode=TwoWay}" />
+                            <TextBlock Text="S/P/E/C order is selected by Layout. Start and End use the same byte-expression syntax as Send." TextWrapping="Wrap" Opacity="0.65" />
+                            <Grid ColumnDefinitions="100,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="6">
+                                <TextBlock Text="Polynomial" VerticalAlignment="Center" /><TextBox x:Name="CrcPolynomialBox" Classes="crcValue" Grid.Column="1" Text="{Binding CrcPolynomial, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="1" Text="Initial" VerticalAlignment="Center" /><TextBox x:Name="CrcInitialBox" Classes="crcValue" Grid.Row="1" Grid.Column="1" Text="{Binding CrcInitialValue, Mode=TwoWay}" />
+                                <TextBlock Grid.Row="2" Text="Residue" VerticalAlignment="Center" /><TextBox x:Name="CrcResidueBox" Classes="crcValue" Grid.Row="2" Grid.Column="1" Text="{Binding CrcExpectedResidue, Mode=TwoWay}" />
+                            </Grid>
+                            <CheckBox x:Name="CrcPostInvertBox" Content="Post-invert CRC" IsChecked="{Binding CrcPostInvert, Mode=TwoWay}" /><CheckBox x:Name="CrcMsBitFirstBox" Content="MS bit first" IsChecked="{Binding CrcMsBitFirst, Mode=TwoWay}" /><CheckBox x:Name="CrcMsByteFirstBox" Content="MS byte first" IsChecked="{Binding CrcMsByteFirst, Mode=TwoWay}" />
                         </StackPanel>
                     </Border>
                     <Border Padding="12" BorderThickness="1" CornerRadius="4">
-                        <StackPanel Spacing="6">
-                            <TextBlock Text="Signals" FontSize="16" FontWeight="SemiBold" />
-                            <Border Classes="sectionRule"/>
-                            <UniformGrid Columns="3" Rows="2">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="RtsSignal" Classes="signalLed" />
-                                    <TextBlock Text="RTS" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="CtsSignal" Classes="signalLed" />
-                                    <TextBlock Text="CTS" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="DtrSignal" Classes="signalLed" />
-                                    <TextBlock Text="DTR" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="DsrSignal" Classes="signalLed" />
-                                    <TextBlock Text="DSR" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="DcdSignal" Classes="signalLed" />
-                                    <TextBlock Text="DCD" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <shapes:Ellipse x:Name="RiSignal" Classes="signalLed" />
-                                    <TextBlock Text="RI" />
-                                </StackPanel>
-                            </UniformGrid>
-                        </StackPanel>
+                        <StackPanel Spacing="6"><TextBlock Text="Signals" FontSize="16" FontWeight="SemiBold" /><Border Classes="sectionRule"/><UniformGrid Columns="3" Rows="2">
+                            <StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="RtsSignal" Classes="signalLed" /><TextBlock Text="RTS" /></StackPanel><StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="CtsSignal" Classes="signalLed" /><TextBlock Text="CTS" /></StackPanel><StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="DtrSignal" Classes="signalLed" /><TextBlock Text="DTR" /></StackPanel><StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="DsrSignal" Classes="signalLed" /><TextBlock Text="DSR" /></StackPanel><StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="DcdSignal" Classes="signalLed" /><TextBlock Text="DCD" /></StackPanel><StackPanel Orientation="Horizontal" Spacing="6"><shapes:Ellipse x:Name="RiSignal" Classes="signalLed" /><TextBlock Text="RI" /></StackPanel>
+                        </UniformGrid></StackPanel>
                     </Border>
                 </StackPanel>
             </ScrollViewer>
             <TabControl Grid.Column="1">
                 <TabItem Header="Communications">
                     <Grid Margin="10" RowDefinitions="Auto,*" RowSpacing="12">
-                        <Grid RowDefinitions="Auto,Auto" RowSpacing="6">
-                            <TextBlock Text="Send" FontSize="16" FontWeight="SemiBold" />
-                            <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                                <TextBox x:Name="CommandBox" PlaceholderText="Enter command" KeyDown="CommandBox_KeyDown" />
-                                <Button x:Name="SendButton" Classes="terminalAction" Grid.Column="1" Content="Send" Click="Send_Click" HorizontalAlignment="Right" />
-                            </Grid>
-                        </Grid>
-                        <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="6">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Text="Received" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <Button Classes="terminalAction" Grid.Column="1" Content="Clear" Click="ClearReceived_Click" HorizontalAlignment="Right" />
-                            </Grid>
-                            <TextBox x:Name="ReceivedBox" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas, monospace" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" />
-                        </Grid>
+                        <Grid RowDefinitions="Auto,Auto" RowSpacing="6"><TextBlock Text="Send" FontSize="16" FontWeight="SemiBold" /><Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8"><TextBox x:Name="CommandBox" PlaceholderText="Enter command" KeyDown="CommandBox_KeyDown" /><Button x:Name="SendButton" Classes="terminalAction" Grid.Column="1" Content="Send" Click="Send_Click" HorizontalAlignment="Right" /></Grid></Grid>
+                        <Grid Grid.Row="1" RowDefinitions="Auto,*" RowSpacing="6"><Grid ColumnDefinitions="*,Auto"><TextBlock Text="Received" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" /><Button Classes="terminalAction" Grid.Column="1" Content="Clear" Click="ClearReceived_Click" HorizontalAlignment="Right" /></Grid><TextBox x:Name="ReceivedBox" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" FontFamily="Cascadia Mono, Consolas, monospace" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Disabled" /></Grid>
                     </Grid>
                 </TabItem>
                 <TabItem Header="Transport Diagnostics">
                     <Grid Margin="10" RowDefinitions="Auto,Auto,*" RowSpacing="6">
-                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
-                            <StackPanel>
-                                <TextBlock Text="Transport Diagnostics" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock Text="Detailed record of how serial traffic was transported and processed" Opacity="0.65" />
-                            </StackPanel>
-                            <CheckBox Grid.Column="1" Content="Word wrap" VerticalAlignment="Center" IsChecked="{Binding DiagnosticWordWrap, Mode=TwoWay}" />
-                            <Button Grid.Column="2" Content="Clear" Click="ClearDiagnostics_Click" VerticalAlignment="Center" />
-                        </Grid>
-                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8">
-                            <TextBlock Text="Log" VerticalAlignment="Center" />
-                            <TextBox x:Name="LogFileBox" Grid.Column="1" IsReadOnly="True" />
-                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10"><StackPanel><TextBlock Text="Transport Diagnostics" FontSize="16" FontWeight="SemiBold" /><TextBlock Text="Detailed record of how serial traffic was transported and processed" Opacity="0.65" /></StackPanel><CheckBox Grid.Column="1" Content="Word wrap" VerticalAlignment="Center" IsChecked="{Binding DiagnosticWordWrap, Mode=TwoWay}" /><Button Grid.Column="2" Content="Clear" Click="ClearDiagnostics_Click" VerticalAlignment="Center" /></Grid>
+                        <Grid Grid.Row="1" ColumnDefinitions="Auto,*" ColumnSpacing="8"><TextBlock Text="Log" VerticalAlignment="Center" /><TextBox x:Name="LogFileBox" Grid.Column="1" IsReadOnly="True" /></Grid>
                         <TextBox x:Name="DiagnosticsBox" Grid.Row="2" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" FontFamily="Cascadia Mono, Consolas, monospace" ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
                     </Grid>
                 </TabItem>
