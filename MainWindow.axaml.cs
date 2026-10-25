@@ -32,6 +32,7 @@ public sealed partial class MainWindow : Window
         BaudBox.ItemsSource = new[] { 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200 };
         ParityBox.ItemsSource = Enum.GetValues<Parity>(); DataBitsBox.ItemsSource = new[] { 5, 6, 7, 8 }; StopBitsBox.ItemsSource = new[] { StopBits.One, StopBits.OnePointFive, StopBits.Two };
         HandshakeBox.ItemsSource = Enum.GetValues<Handshake>(); RtsBox.ItemsSource = Enum.GetValues<SerialChannel.RtsModes>(); ReceivedFormatBox.ItemsSource = new[] { ReceivedDataFormat.Text, ReceivedDataFormat.Bytes };
+        FrameLayoutBox.ItemsSource = Enum.GetValues<FrameLayout>(); CheckKindBox.ItemsSource = Enum.GetValues<MessageCheckKind>();
         configuration.PropertyChanged += Configuration_PropertyChanged; configuration.Changed += Configuration_Changed; log.EntryRecorded += AppendDiagnostic;
         session.Log = log; session.DataReceived += ReceivedDataReceived; session.Connected += (_, _) => PostConnectionState(); session.Disconnecting += (_, _) => PostConnectionState(false);
         RefreshPorts(); ApplyDiagnosticWordWrap(); UpdateConnectionState(false); UpdateSignalDisplay(null); UpdateLogFileDisplay(); Closed += MainWindow_Closed;
@@ -66,7 +67,7 @@ public sealed partial class MainWindow : Window
     private void SendCommand()
     {
         var expression = CommandBox.Text ?? string.Empty; if (expression.Length == 0) return;
-        if (!SendDataParser.TryParse(expression, out var bytes, out var parseError)) { EnsureSessionLog(); log.Record($"Send rejected: {parseError}"); return; }
+        if (!ByteExpression.TryParse(expression, out var bytes, out var parseError)) { EnsureSessionLog(); log.Record($"Send rejected: {parseError}"); return; }
         if (!session.Ready) { EnsureSessionLog(); log.Record($"Send rejected: no device connected. Expression: \"{expression}\""); return; }
         if (session.Send(bytes)) { commandHistory.Add(expression); commandHistoryIndex = commandHistory.Count; CommandBox.SelectAll(); }
     }
@@ -75,11 +76,11 @@ public sealed partial class MainWindow : Window
     private string FormatReceivedData(ReceivedData data)
     {
         var bytesMode = configuration.ReceivedDataFormat == ReceivedDataFormat.Bytes;
-        var payload = bytesMode ? BinaryDataFormatter.ToHexBytes(data.PayloadBytes.Span) : BinaryDataFormatter.ToEscapedText(data.PayloadBytes.Span);
+        var payload = bytesMode ? BinaryDataFormatter.ToHexBytes(data.PayloadBytes.Span) : ByteExpression.Format(data.PayloadBytes.Span);
         var result = payload;
         if (configuration.ShowCrcBytes && !data.CrcBytes.IsEmpty)
         {
-            var crc = bytesMode ? BinaryDataFormatter.ToHexBytes(data.CrcBytes.Span) : string.Concat(data.CrcBytes.Span.ToArray().Select(b => $"\\x{b:X2}"));
+            var crc = bytesMode ? BinaryDataFormatter.ToHexBytes(data.CrcBytes.Span) : ByteExpression.Format(data.CrcBytes.Span);
             result += (result.Length == 0 ? string.Empty : " ") + crc;
         }
         if (data.CrcValid == false)
@@ -131,22 +132,22 @@ public sealed partial class MainWindow : Window
     }
 
     private static bool IsProtocolProperty(string? propertyName) => propertyName is
-        nameof(TerminalConfiguration.UseCrc) or nameof(TerminalConfiguration.CrcPolynomial) or
-        nameof(TerminalConfiguration.CrcInitialValue) or nameof(TerminalConfiguration.CrcExpectedResidue) or
-        nameof(TerminalConfiguration.TermChar) or nameof(TerminalConfiguration.CrcPostInvert) or
+        nameof(TerminalConfiguration.FrameLayout) or nameof(TerminalConfiguration.StartExpression) or
+        nameof(TerminalConfiguration.EndExpression) or nameof(TerminalConfiguration.CheckKind) or
+        nameof(TerminalConfiguration.CrcPolynomial) or nameof(TerminalConfiguration.CrcInitialValue) or
+        nameof(TerminalConfiguration.CrcExpectedResidue) or nameof(TerminalConfiguration.CrcPostInvert) or
         nameof(TerminalConfiguration.CrcMsBitFirst) or nameof(TerminalConfiguration.CrcMsByteFirst) or
-        nameof(TerminalConfiguration.OmitTermChar) or nameof(TerminalConfiguration.SuppressCrcErrors);
+        nameof(TerminalConfiguration.SuppressCrcErrors);
 
     private void ApplyProtocolConfiguration()
     {
-        if (session.SerialChannel is not { } channel || !session.Ready) return;
+        if (session.SerialChannel is not { } channel) return;
         if (!configuration.TryCreateProtocolSettings(out var protocol, out var error))
         {
-            log.Record($"Protocol configuration not applied: {error}");
+            if (log.FileName is not null) log.Record($"Protocol configuration not applied: {error}");
             return;
         }
-        if (!channel.StageProtocolSettings(protocol!))
-            log.Record("Protocol configuration requires reconnect because the receive framing strategy changed.");
+        channel.StageProtocolSettings(protocol!);
     }
 
     private void Configuration_Changed(object? sender, ConfigurationChangedEventArgs e) { if (log.FileName is not null) log.Record($"Configuration changed: {e.PropertyName}: {FormatConfigurationValue(e.OldValue)} -> {FormatConfigurationValue(e.NewValue)}"); }
