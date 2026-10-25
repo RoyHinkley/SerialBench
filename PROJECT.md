@@ -18,7 +18,8 @@ Do not add library features merely to make SerialBench convenient. A `SerialComm
 
 - `ReceivedData` is authoritative byte-oriented evidence. Text decoding and presentation belong to SerialBench; normalized recording and visual rendering are derivatives and must not alter or obscure the received bytes.
 - Live protocol changes apply immediately when the receive decoder has no incomplete message. If bytes are already buffered, the old decoder completes that message and the staged decoder takes over exactly at its boundary, including when following bytes occur in the same transport chunk.
-- Current `SerialCommunications` framing is expressed by `FrameLayout` plus literal start/end sequences and an optional reusable message check. SerialBench's older CRC/termination model must be migrated to this API rather than preserved as an application-specific approximation.
+- Current `SerialCommunications` framing is expressed by `FrameLayout` plus literal start/end sequences and an optional reusable message check. SerialBench exposes the complete library framing model rather than maintaining a smaller CRC/termination approximation.
+- SerialBench alone owns its byte-expression notation. `ByteExpression` is the single bidirectional conversion boundary for editable byte sequences: printable ASCII is literal, backslash/CR/LF/TAB use `\\`, `\r`, `\n`, `\t`, and all other bytes use `\xHH`. Octal escapes are deliberately unsupported. Arbitrary byte arrays must round-trip exactly through format/parse. Use this same notation for sends and framing sequences; do not move it into `SerialCommunications`.
 - `SerialChannelTelemetry.MessagesReceived` counts decoded/framed messages, including invalid messages suppressed from consumer delivery. `CheckFailures` records the independent failed-check fact. Recovery-period attempt state remains distinct from lifetime telemetry.
 - A normal logical transmit trace is emitted only after the complete message has been written successfully. Failed writes are errors but are neither counted nor narrated as completed transmissions.
 - Exceptions thrown by `SerialChannel` event subscribers are consumer faults, not communications errors; isolate them and report only as detailed diagnostics.
@@ -29,22 +30,13 @@ Do not add library features merely to make SerialBench convenient. A `SerialComm
 - Configuration ownership is split by role: `SerialChannelConfiguration` / `SerialProtocolSettings` are reusable library snapshots; SerialBench owns live editing, persistence, profiles, and UI defaults.
 - Receive decoder/framer/pump/dispatch types are implementation details rather than public library API. Message-check calculations remain reusable public mechanisms.
 
-## Immediate work: synchronize to current SerialCommunications API
+## Immediate checkpoint: full framing support
 
-Before further SerialBench feature work, migrate the application to the current `SerialCommunications` API and preserve the application's existing useful behavior where that behavior still maps cleanly to the library.
+The initial API migration has built successfully with all 14 tests green. Before Phase 1 refinements, complete and verify SerialBench support for the full `SerialCommunications` framing model.
 
-The known mismatch is the protocol configuration model. SerialBench still constructs the former `CrcOptions` shape containing termination-character/omit-termination behavior and then uses `SerialProtocolSettings.From(...)`. The library now separates CRC calculation from framing: `CrcOptions` contains only CRC calculation/byte-order options, while `SerialProtocolSettings` owns `FrameLayout`, start/end byte sequences, check kind, and invalid-message suppression.
+SerialBench should expose every current `FrameLayout` (`P`, `PE`, `PC`, `PEC`, `SP`, `SPE`, `SPC`, `SPEC`, `PCE`), editable start/end byte sequences using `ByteExpression`, and the available message-check selection/configuration. The historical default remains `PCE`, CRC-16, end `\x03`. Start/end/check configuration may remain dormant when the selected layout does not use that element, matching `SerialProtocolSettings`; a layout containing C is invalid without a configured check method.
 
-The migration should therefore:
-
-1. replace the obsolete SerialBench CRC/termination assumptions with explicit framing/check configuration that maps faithfully to `SerialProtocolSettings`;
-2. preserve the historical SerialBench default wire behavior where representable (payload + CRC + terminating byte with the terminating byte omitted from delivered payload corresponds to `PCE` with CRC-16 and the configured end sequence);
-3. update live protocol editing/staging to the current snapshot API;
-4. update received-data presentation code to the current `ReceivedData` representation;
-5. add/adjust non-Avalonia tests for configuration-to-library mapping where useful;
-6. build/test before moving on to Phase 1 proper.
-
-Treat compile errors and API mismatches discovered during this migration as SerialBench adaptation work unless they demonstrate a genuine reusable-library defect or missing requirement.
+Build/test this checkpoint before beginning Phase 1 proper. Treat compile errors and API mismatches as SerialBench adaptation work unless they demonstrate a genuine reusable-library defect or missing requirement.
 
 ## Planned SerialBench work
 
