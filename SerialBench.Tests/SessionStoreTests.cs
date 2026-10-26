@@ -20,7 +20,8 @@ public sealed class SessionStoreTests
                 Assert.Equal(0, store.AppendTxMessage(txTime, [0x02], [0x10, 0x20], [0x03]));
                 Assert.Equal(1, store.AppendRxMessage(rxTime, SessionCheckValidity.Invalid, [0xAA, 0xBB], [0x30], [0xCC, 0xDD]));
                 Assert.Equal(2, store.AppendDiagnostic(diagnosticTime, "check failed: µ"));
-                Assert.Equal([0L, 1L, 2L], Enumerable.Range(0, store.EventCount).Select(i => (long)i));
+                Assert.Equal(3, store.EventCount);
+                Assert.Equal([1], store.RxMessageEvents);
 
                 var tx = Assert.IsType<TxSessionRecord>(store.ReadEvent(0));
                 Assert.Equal(txTime, tx.TimestampUtc);
