@@ -13,9 +13,9 @@ public enum SessionRecordType : byte
 /// <summary>Describes the receive check result recorded with an Rx message.</summary>
 public enum SessionCheckValidity : byte
 {
-    NoCheck = 0,
+    Invalid = 0,
     Valid = 1,
-    Invalid = 2,
+    Ignore = 2,
 }
 
 /// <summary>Base type for records read from a <see cref="SessionStore"/>.</summary>
@@ -26,12 +26,7 @@ public sealed record TxSessionRecord(DateTime TimestampUtc, byte[] Prefix, byte[
     : SessionRecord(SessionRecordType.TxMessage, TimestampUtc);
 
 /// <summary>A received message, decomposed into framing prefix, payload, and suffix.</summary>
-public sealed record RxSessionRecord(
-    DateTime TimestampUtc,
-    SessionCheckValidity CheckValidity,
-    byte[] Prefix,
-    byte[] Payload,
-    byte[] Suffix)
+public sealed record RxSessionRecord(DateTime TimestampUtc, SessionCheckValidity CheckValidity, byte[] Prefix, byte[] Payload, byte[] Suffix)
     : SessionRecord(SessionRecordType.RxMessage, TimestampUtc);
 
 /// <summary>A diagnostic message recorded exactly as supplied.</summary>
@@ -39,8 +34,9 @@ public sealed record DiagnosticSessionRecord(DateTime TimestampUtc, string Text)
     : SessionRecord(SessionRecordType.Diagnostic, TimestampUtc);
 
 /// <summary>
-/// Append-only SerialBench session store. The on-disk format is explicitly little-endian and is
-/// recoverable by scanning forward to the first invalid or incomplete record.
+/// Append-only SerialBench session store. The on-disk format is explicitly little-endian. An
+/// obviously incomplete final append is discarded; structural corruption is reported without
+/// modifying the file.
 /// </summary>
 public sealed class SessionStore : IDisposable
 {
@@ -59,16 +55,9 @@ public sealed class SessionStore : IDisposable
     private readonly List<int> rxMessageEvents = [];
     private bool disposed;
 
-    /// <summary>Gets the file offsets of all valid records in chronological order.</summary>
     public IReadOnlyList<long> EventOffsets => eventOffsets;
-
-    /// <summary>Gets event ordinals for received-message records.</summary>
     public IReadOnlyList<int> RxMessageEvents => rxMessageEvents;
-
-    /// <summary>Gets the number of valid records in the session.</summary>
     public int EventCount => eventOffsets.Count;
-
-    /// <summary>Gets the number of received-message records in the session.</summary>
     public int RxMessageCount => rxMessageEvents.Count;
 
     /// <summary>Opens an existing session or creates a new version 1.0 session.</summary>
@@ -79,20 +68,26 @@ public sealed class SessionStore : IDisposable
         reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
         writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
 
-        if (stream.Length == 0)
+        try
         {
-            WriteFileHeader();
-            writer.Flush();
-        }
-        else
-        {
-            ReadFileHeader();
-        }
+            if (stream.Length == 0)
+            {
+                WriteFileHeader();
+                writer.Flush();
+            }
+            else ReadFileHeader();
 
-        ScanAndRecover();
+            ScanAndRecover();
+        }
+        catch
+        {
+            writer.Dispose();
+            reader.Dispose();
+            stream.Dispose();
+            throw;
+        }
     }
 
-    /// <summary>Appends a transmitted message and returns its event ordinal.</summary>
     public int AppendTxMessage(DateTime timestampUtc, ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> payload, ReadOnlySpan<byte> suffix)
     {
         ValidateTimestamp(timestampUtc);
@@ -108,13 +103,7 @@ public sealed class SessionStore : IDisposable
         return eventOrdinal;
     }
 
-    /// <summary>Appends a received message and returns its event ordinal.</summary>
-    public int AppendRxMessage(
-        DateTime timestampUtc,
-        SessionCheckValidity checkValidity,
-        ReadOnlySpan<byte> prefix,
-        ReadOnlySpan<byte> payload,
-        ReadOnlySpan<byte> suffix)
+    public int AppendRxMessage(DateTime timestampUtc, SessionCheckValidity checkValidity, ReadOnlySpan<byte> prefix, ReadOnlySpan<byte> payload, ReadOnlySpan<byte> suffix)
     {
         ValidateTimestamp(timestampUtc);
         ValidateCheckValidity(checkValidity);
@@ -132,7 +121,6 @@ public sealed class SessionStore : IDisposable
         return eventOrdinal;
     }
 
-    /// <summary>Appends a UTF-8 diagnostic exactly as supplied and returns its event ordinal.</summary>
     public int AppendDiagnostic(DateTime timestampUtc, string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -144,7 +132,6 @@ public sealed class SessionStore : IDisposable
         return eventOrdinal;
     }
 
-    /// <summary>Reads an event by chronological ordinal.</summary>
     public SessionRecord ReadEvent(int eventOrdinal)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -155,7 +142,6 @@ public sealed class SessionStore : IDisposable
         var type = (SessionRecordType)reader.ReadByte();
         var recordLength = reader.ReadInt32();
         var timestamp = new DateTime(reader.ReadInt64(), DateTimeKind.Utc);
-
         return type switch
         {
             SessionRecordType.TxMessage => ReadTx(timestamp),
@@ -165,21 +151,18 @@ public sealed class SessionStore : IDisposable
         };
     }
 
-    /// <summary>Reads a received message by its received-message ordinal.</summary>
     public RxSessionRecord ReadRxMessage(int rxMessageOrdinal)
     {
         if ((uint)rxMessageOrdinal >= (uint)rxMessageEvents.Count) throw new ArgumentOutOfRangeException(nameof(rxMessageOrdinal));
         return (RxSessionRecord)ReadEvent(rxMessageEvents[rxMessageOrdinal]);
     }
 
-    /// <summary>Flushes buffered session data to the operating system.</summary>
     public void Flush()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         writer.Flush();
     }
 
-    /// <summary>Flushes buffered session data through to durable storage.</summary>
     public void FlushToDisk()
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -222,59 +205,85 @@ public sealed class SessionStore : IDisposable
     private void ScanAndRecover()
     {
         var offset = (long)FileHeaderLength;
-        var validEnd = offset;
-
         while (offset < stream.Length)
         {
             var remaining = stream.Length - offset;
-            if (remaining < CommonRecordLength) break;
+            if (remaining < CommonRecordLength)
+            {
+                TruncateIncompleteTail(offset);
+                return;
+            }
 
             stream.Position = offset;
             var typeValue = reader.ReadByte();
-            if (!Enum.IsDefined(typeof(SessionRecordType), typeValue)) break;
+            if (!Enum.IsDefined(typeof(SessionRecordType), typeValue)) ThrowCorrupt(offset, "invalid record type");
             var type = (SessionRecordType)typeValue;
             var recordLength = reader.ReadInt32();
-            var minimumLength = type switch
+            var minimumLength = MinimumLength(type);
+            if (recordLength < minimumLength) ThrowCorrupt(offset, "record length is smaller than its fixed fields");
+
+            if (recordLength > remaining)
             {
-                SessionRecordType.TxMessage => TxFixedLength,
-                SessionRecordType.RxMessage => RxFixedLength,
-                SessionRecordType.Diagnostic => CommonRecordLength,
-                _ => int.MaxValue,
-            };
-            if (recordLength < minimumLength || recordLength > remaining) break;
+                if (IsPlausibleIncompleteTail(type, recordLength, remaining))
+                {
+                    TruncateIncompleteTail(offset);
+                    return;
+                }
+                ThrowCorrupt(offset, "record length is inconsistent with the available record fields");
+            }
 
             _ = reader.ReadInt64();
-            if (!ValidateRecordStructure(type, recordLength)) break;
+            if (!ValidateRecordStructure(type, recordLength)) ThrowCorrupt(offset, "record fields are structurally inconsistent");
 
             var eventOrdinal = eventOffsets.Count;
             eventOffsets.Add(offset);
             if (type == SessionRecordType.RxMessage) rxMessageEvents.Add(eventOrdinal);
             offset += recordLength;
-            validEnd = offset;
         }
 
-        if (validEnd != stream.Length) stream.SetLength(validEnd);
         stream.Position = stream.Length;
     }
+
+    private bool IsPlausibleIncompleteTail(SessionRecordType type, int recordLength, long remaining)
+    {
+        if (type == SessionRecordType.Diagnostic) return true;
+        var fixedLength = MinimumLength(type);
+        if (remaining < fixedLength) return true;
+        _ = reader.ReadInt64();
+        return ValidateRecordStructure(type, recordLength);
+    }
+
+    private void TruncateIncompleteTail(long validEnd)
+    {
+        stream.SetLength(validEnd);
+        stream.Position = validEnd;
+    }
+
+    private static int MinimumLength(SessionRecordType type) => type switch
+    {
+        SessionRecordType.TxMessage => TxFixedLength,
+        SessionRecordType.RxMessage => RxFixedLength,
+        SessionRecordType.Diagnostic => CommonRecordLength,
+        _ => int.MaxValue,
+    };
+
+    private static void ThrowCorrupt(long offset, string reason) =>
+        throw new InvalidDataException($"SerialBench session is corrupt at byte offset {offset}: {reason}.");
 
     private bool ValidateRecordStructure(SessionRecordType type, int recordLength)
     {
         if (type == SessionRecordType.Diagnostic) return true;
-
         if (type == SessionRecordType.RxMessage)
         {
             var checkValidity = (SessionCheckValidity)reader.ReadByte();
             if (!IsValidCheckValidity(checkValidity)) return false;
         }
-
         var prefixLength = reader.ReadByte();
         var payloadLength = reader.ReadInt32();
         var suffixLength = reader.ReadByte();
         if (payloadLength < 0) return false;
-
         var fixedLength = type == SessionRecordType.TxMessage ? TxFixedLength : RxFixedLength;
-        var expectedLength = (long)fixedLength + prefixLength + payloadLength + suffixLength;
-        return expectedLength == recordLength;
+        return (long)fixedLength + prefixLength + payloadLength + suffixLength == recordLength;
     }
 
     private TxSessionRecord ReadTx(DateTime timestamp)
@@ -323,7 +332,7 @@ public sealed class SessionStore : IDisposable
     }
 
     private static bool IsValidCheckValidity(SessionCheckValidity value) =>
-        value is SessionCheckValidity.NoCheck or SessionCheckValidity.Valid or SessionCheckValidity.Invalid;
+        value is SessionCheckValidity.Invalid or SessionCheckValidity.Valid or SessionCheckValidity.Ignore;
 
     public void Dispose()
     {
