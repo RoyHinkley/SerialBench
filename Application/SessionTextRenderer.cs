@@ -35,9 +35,9 @@ public static class SessionTextRenderer
     private static string FormatMessage(byte[] prefix, byte[] payload, byte[] suffix)
     {
         var builder = new StringBuilder();
-        AppendSegment(builder, "S", prefix);
+        AppendSegment(builder, "PRE", prefix);
         AppendSegment(builder, "P", payload);
-        AppendSegment(builder, "E", suffix);
+        AppendSegment(builder, "SUF", suffix);
         return builder.ToString();
     }
 
